@@ -46,6 +46,7 @@ ZOOM_OUT_FACTOR = 1/ZOOM_IN_FACTOR
 # vehicle shape constants
 CAR_LENGTH = 0.58
 CAR_WIDTH = 0.31
+MAX_RENDER_MAP_POINTS = 80000
 
 class EnvRenderer(pyglet.window.Window):
     """
@@ -69,7 +70,7 @@ class EnvRenderer(pyglet.window.Window):
         super().__init__(width, height, config=conf, resizable=True, vsync=False, *args, **kwargs)
 
         # gl init
-        glClearColor(9/255, 32/255, 87/255, 1.)
+        glClearColor(232/255, 236/255, 240/255, 1.)
 
         # initialize camera values
         self.left = -width/2
@@ -103,7 +104,7 @@ class EnvRenderer(pyglet.window.Window):
                 anchor_y='center',
                 # width=0.01,
                 # height=0.01,
-                color=(255, 255, 255, 255),
+                color=(20, 24, 31, 255),
                 batch=self.batch)
 
         self.fps_display = pyglet.window.FPSDisplay(self)
@@ -132,25 +133,29 @@ class EnvRenderer(pyglet.window.Window):
                 print(ex)
 
         # load map image
-        map_img = np.array(Image.open(map_path + map_ext).transpose(Image.FLIP_TOP_BOTTOM)).astype(np.float64)
-        map_height = map_img.shape[0]
-        map_width = map_img.shape[1]
+        map_img = np.array(Image.open(map_path + map_ext).transpose(Image.FLIP_TOP_BOTTOM))
 
-        # convert map pixels to coordinates
-        range_x = np.arange(map_width)
-        range_y = np.arange(map_height)
-        map_x, map_y = np.meshgrid(range_x, range_y)
-        map_x = (map_x * map_resolution + origin_x).flatten()
-        map_y = (map_y * map_resolution + origin_y).flatten()
-        map_z = np.zeros(map_y.shape)
-        map_coords = np.vstack((map_x, map_y, map_z))
+        # mask and only leave the obstacle points. Large maps can contain
+        # millions of pixels, so downsample before creating OpenGL vertices.
+        map_mask = map_img == 0
+        map_ys, map_xs = np.nonzero(map_mask)
+        if map_xs.shape[0] > MAX_RENDER_MAP_POINTS:
+            keep = np.linspace(0, map_xs.shape[0] - 1, MAX_RENDER_MAP_POINTS, dtype=np.int64)
+            map_xs = map_xs[keep]
+            map_ys = map_ys[keep]
 
-        # mask and only leave the obstacle points
-        map_mask = map_img == 0.0
-        map_mask_flat = map_mask.flatten()
-        map_points = 50. * map_coords[:, map_mask_flat].T
-        for i in range(map_points.shape[0]):
-            self.batch.add(1, GL_POINTS, None, ('v3f/stream', [map_points[i, 0], map_points[i, 1], map_points[i, 2]]), ('c3B/stream', [183, 193, 222]))
+        map_x = map_xs * map_resolution + origin_x
+        map_y = map_ys * map_resolution + origin_y
+        map_z = np.zeros_like(map_x)
+        map_points = 50. * np.column_stack((map_x, map_y, map_z))
+
+        colors = np.tile(np.array([44, 52, 66], dtype=np.uint8), map_points.shape[0])
+        self.batch.add(
+            map_points.shape[0],
+            GL_POINTS,
+            None,
+            ('v3f/static', map_points.astype(np.float32).ravel().tolist()),
+            ('c3B/static', colors.tolist()))
         self.map_points = map_points
 
     def on_resize(self, width, height):
@@ -285,6 +290,7 @@ class EnvRenderer(pyglet.window.Window):
 
         # Clear window with ClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glPointSize(2.0)
 
         # Set orthographic projection matrix
         glOrtho(self.left, self.right, self.bottom, self.top, 1, -1)

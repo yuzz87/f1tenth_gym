@@ -43,12 +43,16 @@ def accl_constraints(vel, accl, v_switch, a_max, v_min, v_max):
             accl (float): adjusted acceleration
     """
 
+    # 速度が高い領域では、加速可能量を落とす。
+    # v_switch より上ではタイヤの駆動力制限を簡易的に表現している。
     # positive accl limit
     if vel > v_switch:
         pos_limit = a_max*v_switch/vel
     else:
         pos_limit = a_max
 
+    # 速度上限/下限に達している方向へは加速させない。
+    # それ以外でも、最大加速度・最大減速度でクリップする。
     # accl limit reached?
     if (vel <= v_min and accl <= 0) or (vel >= v_max and accl >= 0):
         accl = 0.
@@ -76,6 +80,8 @@ def steering_constraint(steering_angle, steering_velocity, s_min, s_max, sv_min,
             steering_velocity (float): adjusted steering velocity
     """
 
+    # ステア角の機械的な上限/下限を超える方向には動かさない。
+    # さらにステア角速度も sv_min/sv_max の範囲に制限する。
     # constraint steering velocity
     if (steering_angle <= s_min and steering_velocity <= 0) or (steering_angle >= s_max and steering_velocity >= 0):
         steering_velocity = 0.
@@ -106,13 +112,17 @@ def vehicle_dynamics_ks(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
         Returns:
             f (numpy.ndarray): right hand side of differential equations
     """
+    # Kinematic Single Track model。
+    # 低速域や単純な幾何学的運動を表すモデルで、横滑りなどの動的効果は扱わない。
     # wheelbase
     lwb = lf + lr
 
     # constraints
+    # 入力されたステア角速度・加速度を車両制約内へ丸める。
     u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
 
     # system dynamics
+    # 状態微分 f = dx/dt を返す。呼び出し側の積分器がこの値で状態を進める。
     f = np.array([x[3]*np.cos(x[4]),
          x[3]*np.sin(x[4]),
          u[0],
@@ -142,18 +152,24 @@ def vehicle_dynamics_st(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
             f (numpy.ndarray): right hand side of differential equations
     """
 
+    # Dynamic Single Track model。
+    # yaw rate や slip angle を含むため、高速域の車両挙動をより細かく表現できる。
     # gravity constant m/s^2
     g = 9.81
 
     # constraints
+    # 入力されたステア角速度・加速度を車両制約内へ丸める。
     u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
 
     # switch to kinematic model for small velocities
+    # 低速では動的モデルの式に速度割り算があり、数値的に不安定になりやすい。
+    # そのため 0.5 m/s 未満では運動学モデルへ切り替える。
     if abs(x[3]) < 0.5:
         # wheelbase
         lwb = lf + lr
 
         # system dynamics
+        # 低速時はKSモデルの5状態に、yaw rate と slip angle の微分を補って7状態に戻す。
         x_ks = x[0:5]
         f_ks = vehicle_dynamics_ks(x_ks, u, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max)
         f = np.hstack((f_ks, np.array([u[1]/lwb*np.tan(x[2])+x[3]/(lwb*np.cos(x[2])**2)*u[0],
@@ -161,6 +177,7 @@ def vehicle_dynamics_st(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
 
     else:
         # system dynamics
+        # 高速時はタイヤ横力、ヨーレート、スリップ角を含む動的モデルを使う。
         f = np.array([x[3]*np.cos(x[6] + x[4]),
             x[3]*np.sin(x[6] + x[4]),
             u[0],
@@ -188,7 +205,11 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
             accl (float): desired input acceleration
             sv (float): desired input steering velocity
     """
+    # Gym環境のactionは「目標速度・目標ステア角」。
+    # 車両運動モデルは「加速度・ステア角速度」を欲しがるため、ここで簡易変換する。
+
     # steering
+    # 目標ステア角との差分の符号だけを使い、最大ステア角速度で近づける。
     steer_diff = steer - current_steer
     if np.fabs(steer_diff) > 1e-4:
         sv = (steer_diff / np.fabs(steer_diff)) * max_sv
@@ -196,6 +217,8 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
         sv = 0.0
 
     # accl
+    # 目標速度との差分に比例した加速度を出す。
+    # 前進中/後退中、加速/制動でゲインを変えている。
     vel_diff = speed - current_speed
     # currently forward
     if current_speed > 0.:
@@ -221,15 +244,18 @@ def pid(speed, steer, current_speed, current_steer, max_sv, max_a, max_v, min_v)
     return accl, sv
 
 def func_KS(x, t, u, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):
+    # scipy.integrate.odeint からKSモデルを呼ぶためのラッパー。
     f = vehicle_dynamics_ks(x, u, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max)
     return f
 
 def func_ST(x, t, u, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):
+    # scipy.integrate.odeint からSTモデルを呼ぶためのラッパー。
     f = vehicle_dynamics_st(x, u, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max)
     return f
 
 class DynamicsTest(unittest.TestCase):
     def setUp(self):
+        # CommonRoad由来の基準値に対して、モデルの微分値と積分挙動を検証する。
         # test params
         self.mu = 1.0489
         self.C_Sf = 21.92/1.0489

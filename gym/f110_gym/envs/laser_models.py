@@ -49,6 +49,8 @@ def get_dt(bitmap, resolution):
         Returns:
             dt (numpy.ndarray, (n, m)): output distance matrix, where each cell has the corresponding distance (in meters) to the closest obstacle
     """
+    # 各セルから最も近い障害物までの距離を事前計算する。
+    # ray tracingではこの距離だけ一気に進めるため、スキャン計算を高速化できる。
     dt = resolution * edt(bitmap)
     return dt
 
@@ -67,14 +69,17 @@ def xy_2_rc(x, y, orig_x, orig_y, orig_c, orig_s, height, width, resolution):
             r (int): row number in the transform matrix of the given point
             c (int): column number in the transform matrix of the given point
     """
+    # world座標をマップ原点基準へ平行移動する。
     # translation
     x_trans = x - orig_x
     y_trans = y - orig_y
 
+    # マップ原点のyawを考慮して、マップ座標系へ回転する。
     # rotation
     x_rot = x_trans * orig_c + y_trans * orig_s
     y_rot = -x_trans * orig_s + y_trans * orig_c
 
+    # マップ外なら (-1, -1) を返す。マップ内なら画像行列の row/column に変換する。
     # clip the state to be a cell
     if x_rot < 0 or x_rot >= width * resolution or y_rot < 0 or y_rot >= height * resolution:
         c = -1
@@ -99,6 +104,7 @@ def distance_transform(x, y, orig_x, orig_y, orig_c, orig_s, height, width, reso
         Returns:
             distance (float): corresponding shortest distance to obstacle in meters
     """
+    # world座標を画像セルに変換し、distance transform の値を参照する。
     r, c = xy_2_rc(x, y, orig_x, orig_y, orig_c, orig_s, height, width, resolution)
     distance = dt[r, c]
     return distance
@@ -120,16 +126,19 @@ def trace_ray(x, y, theta_index, sines, cosines, eps, orig_x, orig_y, orig_c, or
             total_distance (float): the distance to first obstacle on the current scan beam
     """
     
+    # 離散化された角度indexから、事前計算済み sin/cos を取り出す。
     # int casting, and index precal trigs
     theta_index_ = int(theta_index)
     s = sines[theta_index_]
     c = cosines[theta_index_]
 
+    # 現在位置から最も近い障害物までの距離を初期ステップ長にする。
     # distance to nearest initialization
     dist_to_nearest = distance_transform(x, y, orig_x, orig_y, orig_c, orig_s, height, width, resolution, dt)
     total_dist = dist_to_nearest
 
     # ray tracing iterations
+    # 障害物に十分近づくまで、distance transform の距離だけビーム方向へ進む。
     while dist_to_nearest > eps and total_dist <= max_range:
         # move in the direction of the ray by dist_to_nearest
         x += dist_to_nearest * c
@@ -161,8 +170,10 @@ def get_scan(pose, theta_dis, fov, num_beams, theta_index_increment, sines, cosi
             scan (numpy.ndarray(n, )): resulting laser scan at the pose, n=num_beams
     """
     # empty scan array init
+    # 各ビームの距離を格納する配列。
     scan = np.empty((num_beams,))
 
+    # poseの向きとFOVから、最初のビーム角を離散角度indexへ変換する。
     # make theta discrete by mapping the range [-pi, pi] onto [0, theta_dis]
     theta_index = theta_dis * (pose[2] - fov/2.)/(2. * np.pi)
 
@@ -172,6 +183,7 @@ def get_scan(pose, theta_dis, fov, num_beams, theta_index_increment, sines, cosi
         theta_index += theta_dis
 
     # sweep through each beam
+    # FOV内の各ビームについてray tracingを行う。
     for i in range(0, num_beams):
         # trace the current beam
         scan[i] = trace_ray(pose[0], pose[1], theta_index, sines, cosines, eps, orig_x, orig_y, orig_c, orig_s, height, width, resolution, dt, max_range)
@@ -202,6 +214,8 @@ def check_ttc_jit(scan, vel, scan_angles, cosines, side_distances, ttc_thresh):
         in_collision (bool): whether vehicle is in collision with environment
         collision_angle (float): at which angle the collision happened
     """
+    # iTTC = 障害物までの余裕距離 / ビーム方向への投影速度。
+    # 閾値より小さければ、近い将来衝突するとみなす。
     in_collision = False
     if vel != 0.0:
         num_beams = scan.shape[0]
@@ -227,6 +241,7 @@ def cross(v1, v2):
     Returns:
         crossproduct (float): cross product
     """
+    # 2D外積。線分交差や同一直線判定で使う。
     return v1[0]*v2[1]-v1[1]*v2[0]
 
 @njit(cache=True)
@@ -240,6 +255,7 @@ def are_collinear(pt_a, pt_b, pt_c):
     Returns:
         col (bool): whether three points are collinear
     """
+    # 3点がほぼ同一直線上にあるかを外積の大きさで判定する。
     tol = 1e-8
     ba = pt_b - pt_a
     ca = pt_a - pt_c
@@ -259,6 +275,7 @@ def get_range(pose, beam_theta, va, vb):
     Returns:
         distance (float): smallest distance at beam theta from scanning pose to edge
     """
+    # スキャン原点から、車両の1辺(va-vb)へ向けたレイ交差距離を求める。
     o = pose[0:2]
     v1 = o - va
     v2 = vb - va
@@ -289,6 +306,8 @@ def get_blocked_view_indices(pose, vertices, scan_angles):
         vertices (np.ndarray(4, 2)): four vertices of a vehicle pose
         scan_angles (np.ndarray(num_beams, )): corresponding beam angles
     """
+    # スキャン車両から他車両の4頂点へ向かう角度範囲を求める。
+    # この範囲だけray_castすればよいので、全ビームを調べずに済む。
     # find four vectors formed by pose and 4 vertices:
     vecs = vertices - pose[:2]
     vec_sq = np.square(vecs)
@@ -329,12 +348,14 @@ def ray_cast(pose, scan, scan_angles, vertices):
     Returns:
         new_scan (np.ndarray(num_beams, )): modified scan
     """
+    # 他車両の四角形を閉じた線分列として扱うため、最初の頂点を末尾に複製する。
     # pad vertices so loops around
     looped_vertices = np.empty((5, 2))
     looped_vertices[0:4, :] = vertices
     looped_vertices[4, :] = vertices[0, :]
 
     min_ind, max_ind = get_blocked_view_indices(pose, vertices, scan_angles)
+    # 他車両で遮られる可能性があるビーム範囲だけを更新する。
     # looping over beams
     for i in range(min_ind, max_ind + 1):
         # looping over vertices
@@ -358,7 +379,8 @@ class ScanSimulator2D(object):
     """
 
     def __init__(self, num_beams, fov, eps=0.0001, theta_dis=2000, max_range=30.0):
-        # initialization 
+        # initialization
+        # LiDARのビーム数、視野角、最大レンジ、ray tracing停止条件を保存する。
         self.num_beams = num_beams
         self.fov = fov
         self.eps = eps
@@ -376,6 +398,7 @@ class ScanSimulator2D(object):
         self.dt = None
         
         # precomputing corresponding cosines and sines of the angle array
+        # 各ビームで毎回 sin/cos を計算しないよう、離散角度テーブルを事前計算する。
         theta_arr = np.linspace(0.0, 2*np.pi, num=theta_dis)
         self.sines = np.sin(theta_arr)
         self.cosines = np.cos(theta_arr)
@@ -395,11 +418,13 @@ class ScanSimulator2D(object):
         # TODO: throw error if image specification isn't met
 
         # load map image
+        # yamlと同じベース名の画像を読み込み、画像座標とworld座標の向きを合わせる。
         map_img_path = os.path.splitext(map_path)[0] + map_ext
         self.map_img = np.array(Image.open(map_img_path).transpose(Image.FLIP_TOP_BOTTOM))
         self.map_img = self.map_img.astype(np.float64)
 
         # grayscale -> binary
+        # 0を障害物、255を自由空間として扱う二値地図へ変換する。
         self.map_img[self.map_img <= 128.] = 0.
         self.map_img[self.map_img > 128.] = 255.
 
@@ -407,6 +432,7 @@ class ScanSimulator2D(object):
         self.map_width = self.map_img.shape[1]
 
         # load map yaml
+        # resolutionとoriginを読み、world座標と画像セルの対応を作る。
         with open(map_path, 'r') as yaml_stream:
             try:
                 map_metadata = yaml.safe_load(yaml_stream)
@@ -416,12 +442,14 @@ class ScanSimulator2D(object):
                 print(ex)
 
         # calculate map parameters
+        # 座標変換で使うマップ原点と向きの sin/cos を保存する。
         self.orig_x = self.origin[0]
         self.orig_y = self.origin[1]
         self.orig_s = np.sin(self.origin[2])
         self.orig_c = np.cos(self.origin[2])
 
         # get the distance transform
+        # ray tracing高速化のため、各セルから最近傍障害物までの距離を持つ行列を作る。
         self.dt = get_dt(self.map_img, self.map_resolution)
 
         return True
@@ -445,9 +473,11 @@ class ScanSimulator2D(object):
         if self.map_height is None:
             raise ValueError('Map is not set for scan simulator.')
         
+        # 現在姿勢から全ビームの距離を計算する。
         scan = get_scan(pose, self.theta_dis, self.fov, self.num_beams, self.theta_index_increment, self.sines, self.cosines, self.eps, self.orig_x, self.orig_y, self.orig_c, self.orig_s, self.map_height, self.map_width, self.map_resolution, self.dt, self.max_range)
 
         if rng is not None:
+            # 実LiDARに近づけるため、必要に応じて白色ノイズを加える。
             noise = rng.normal(0., std_dev, size=self.num_beams)
             scan += noise
             

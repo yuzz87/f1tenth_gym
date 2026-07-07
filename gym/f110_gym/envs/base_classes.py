@@ -38,6 +38,8 @@ from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
 
 class Integrator(Enum):
+    # 車両運動モデルの数値積分方法。
+    # RK4は精度が高め、Eulerは軽量だが粗め。
     RK4 = 1
     Euler = 2
 
@@ -61,6 +63,8 @@ class RaceCar(object):
     """
 
     # static objects that don't need to be stored in class instances
+    # LiDAR関連の重い計算資源は全車両で共有する。
+    # 複数台の車両を作っても、スキャンシミュレータ本体は1つだけ持つ。
     scan_simulator = None
     cosines = None
     scan_angles = None
@@ -83,6 +87,7 @@ class RaceCar(object):
         """
 
         # initialization
+        # 車両パラメータ、乱数seed、時間刻み、LiDAR位置などを保存する。
         self.params = params
         self.seed = seed
         self.is_ego = is_ego
@@ -95,16 +100,21 @@ class RaceCar(object):
             warnings.warn(f"Chosen integrator is RK4. This is different from previous versions of the gym.")
 
         # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
+        # 車両の現在状態をまとめて持つベクトル。
         self.state = np.zeros((7, ))
 
         # pose of opponents in the world
+        # 他車両の姿勢。LiDARで他車両を検出するために使う。
         self.opp_poses = None
 
         # control inputs
+        # 物理モデルへ渡す現在の加速度入力とステア角速度入力。
         self.accel = 0.0
         self.steer_angle_vel = 0.0
 
         # steering delay buffer
+        # ステアリング応答遅れを簡易的に表すバッファ。
+        # 入力されたステア角をすぐ使わず、数ステップ遅らせて適用する。
         self.steer_buffer = np.empty((0, ))
         self.steer_buffer_size = 2
 
@@ -112,9 +122,12 @@ class RaceCar(object):
         self.in_collision = False
 
         # collision threshold for iTTC to environment
+        # LiDARベースの衝突予測 iTTC の閾値。
         self.ttc_thresh = 0.005
 
         # initialize scan sim
+        # LiDARスキャンシミュレータと各ビームの事前計算値を初期化する。
+        # ここは全車両で一度だけ実行される。
         if RaceCar.scan_simulator is None:
             self.scan_rng = np.random.default_rng(seed=self.seed)
             RaceCar.scan_simulator = ScanSimulator2D(num_beams, fov)
@@ -178,6 +191,8 @@ class RaceCar(object):
             map_path (str): absolute path to the map yaml file
             map_ext (str): extension of the map image file
         """
+        # LiDARシミュレータへ地図ファイルを読み込ませる。
+        # map_path は yaml、map_ext は対応する画像拡張子。
         RaceCar.scan_simulator.set_map(map_path, map_ext)
 
     def reset(self, pose):
@@ -191,6 +206,7 @@ class RaceCar(object):
             None
         """
         # clear control inputs
+        # 入力、衝突状態、車両状態、ステア遅延バッファを初期状態へ戻す。
         self.accel = 0.0
         self.steer_angle_vel = 0.0
         # clear collision indicator
@@ -240,9 +256,11 @@ class RaceCar(object):
             None
         """
         
+        # 現在速度とLiDAR距離から、環境に衝突しそうかを判定する。
         in_collision = check_ttc_jit(current_scan, self.state[3], self.scan_angles, self.cosines, self.side_distances, self.ttc_thresh)
 
         # if in collision stop vehicle
+        # 衝突した場合は速度・角速度などをゼロにして停止させる。
         if in_collision:
             self.state[3:] = 0.
             self.accel = 0.0
@@ -268,6 +286,8 @@ class RaceCar(object):
         # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
 
         # steering delay
+        # 入力ステア角 raw_steer を数ステップ遅らせる。
+        # 実車のサーボ応答遅れを簡易的に表現している。
         steer = 0.
         if self.steer_buffer.shape[0] < self.steer_buffer_size:
             steer = 0.
@@ -279,10 +299,13 @@ class RaceCar(object):
 
 
         # steering angle velocity input to steering velocity acceleration input
+        # Gymのactionは「目標ステア角・目標速度」。
+        # 物理モデルは「ステア角速度・加速度」を入力にするため、pidで変換する。
         accl, sv = pid(vel, steer, self.state[3], self.state[2], self.params['sv_max'], self.params['a_max'], self.params['v_max'], self.params['v_min'])
         
         if self.integrator is Integrator.RK4:
             # RK4 integration
+            # RK4は4回の傾き評価で状態を更新する。Eulerより重いが精度が高い。
             k1 = vehicle_dynamics_st(
                 self.state,
                 np.array([sv, accl]),
@@ -373,6 +396,7 @@ class RaceCar(object):
             self.state = self.state + self.time_step*(1/6)*(k1 + 2*k2 + 2*k3 + k4)
         
         elif self.integrator is Integrator.Euler:
+            # Eulerは1回の傾き評価で状態を更新する。軽いが時間刻みが粗いと誤差が増える。
             f = vehicle_dynamics_st(
                 self.state,
                 np.array([sv, accl]),
@@ -398,12 +422,14 @@ class RaceCar(object):
             raise SyntaxError(f"Invalid Integrator Specified. Provided {self.integrator.name}. Please choose RK4 or Euler")
 
         # bound yaw angle
+        # yaw角を 0 から 2π の範囲に丸める。
         if self.state[4] > 2*np.pi:
             self.state[4] = self.state[4] - 2*np.pi
         elif self.state[4] < 0:
             self.state[4] = self.state[4] + 2*np.pi
 
         # update scan
+        # 更新後の姿勢からLiDAR位置を計算し、新しいスキャンを生成する。
         scan_x = self.state[0] + self.lidar_dist*np.cos(self.state[4])
         scan_y = self.state[1] + self.lidar_dist*np.sin(self.state[4])
         scan_pose = np.array([scan_x, scan_y, self.state[4]])
@@ -477,6 +503,8 @@ class Simulator(object):
         Returns:
             None
         """
+        # Simulatorは複数のRaceCarをまとめて管理する上位クラス。
+        # 各車両の物理更新、LiDAR更新、衝突判定を1ステップごとに実行する。
         self.num_agents = num_agents
         self.seed = seed
         self.time_step = time_step
@@ -488,6 +516,7 @@ class Simulator(object):
         self.collision_idx = -1 * np.ones((self.num_agents, ))
 
         # initializing agents
+        # ego車両と、それ以外の車両を生成する。
         for i in range(self.num_agents):
             if i == ego_idx:
                 ego_car = RaceCar(params, self.seed, is_ego=True, time_step=self.time_step, integrator=integrator, lidar_dist=lidar_dist)
@@ -507,6 +536,7 @@ class Simulator(object):
         Returns:
             None
         """
+        # すべての車両が同じ地図上でLiDARスキャンできるようにする。
         for agent in self.agents:
             agent.set_map(map_path, map_ext)
 
@@ -544,6 +574,7 @@ class Simulator(object):
             None
         """
         # get vertices of all agents
+        # 各車両の四隅を計算し、車両同士の衝突を判定する。
         all_vertices = np.empty((self.num_agents, 4, 2))
         for i in range(self.num_agents):
             all_vertices[i, :, :] = get_vertices(np.append(self.agents[i].state[0:2],self.agents[i].state[4]), self.params['length'], self.params['width'])
@@ -565,6 +596,7 @@ class Simulator(object):
         agent_scans = []
 
         # looping over agents
+        # 1. 各車両の物理状態をactionで更新し、地図に対するLiDARスキャンを得る。
         for i, agent in enumerate(self.agents):
             # update each agent's pose
             current_scan = agent.update_pose(control_inputs[i, 0], control_inputs[i, 1])
@@ -574,10 +606,12 @@ class Simulator(object):
             self.agent_poses[i, :] = np.append(agent.state[0:2], agent.state[4])
 
         # check collisions between all agents
+        # 2. 車両同士の衝突を判定する。
         self.check_collision()
 
         for i, agent in enumerate(self.agents):
             # update agent's information on other agents
+            # 3. 各車両から見た他車両の姿勢を渡し、LiDARスキャンに他車両を反映する。
             opp_poses = np.concatenate((self.agent_poses[0:i, :], self.agent_poses[i+1:, :]), axis=0)
             agent.update_opp_poses(opp_poses)
 
@@ -591,6 +625,7 @@ class Simulator(object):
         # fill in observations
         # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
         # collision_angles is removed from observations
+        # 4. Gym環境へ返すobservation辞書を作る。
         observations = {'ego_idx': self.ego_idx,
             'scans': [],
             'poses_x': [],
@@ -626,5 +661,6 @@ class Simulator(object):
             raise ValueError('Number of poses for reset does not match number of agents.')
 
         # loop over poses to reset
+        # 各車両を指定された初期姿勢へ戻す。
         for i in range(self.num_agents):
             self.agents[i].reset(poses[i, :])
