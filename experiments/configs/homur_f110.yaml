@@ -1,0 +1,56 @@
+# 自分用のF1TENTH Gym実験設定
+#
+# 既存の examples/ や gym/f110_gym/envs/f110_env.py を直接変更せず、
+# このファイルの値を変えて機体・マップ・制御器の設定を切り替える。
+
+run_name: homur_f110
+
+# パスはリポジトリ直下からの相対パスで指定する。
+map_path: examples/example_map
+map_ext: .png
+wpt_path: examples/example_waypoints.csv
+
+# 初期姿勢 [x, y, theta]
+sx: 0.7
+sy: 0.0
+stheta: 1.37079632679
+
+# waypoint CSVの読み込み設定
+wpt_delim: ;
+wpt_rowskip: 3
+wpt_xind: 1
+wpt_yind: 2
+wpt_thind: 3
+wpt_vind: 5
+
+# シミュレーション設定
+num_agents: 1
+timestep: 0.01
+integrator: RK4
+lidar_dist: 0.0
+
+# Pure Pursuit制御器の設定
+controller:
+  tlad: 0.82461887897713965
+  vgain: 1.375
+
+# 機体パラメータ
+car_params:
+  mu: 1.0489
+  C_Sf: 4.718
+  C_Sr: 5.4562
+  lf: 0.15875
+  lr: 0.17145
+  h: 0.074
+  m: 3.74
+  I: 0.04712
+  s_min: -0.4189
+  s_max: 0.4189
+  sv_min: -3.2
+  sv_max: 3.2
+  v_switch: 7.319
+  a_max: 9.51
+  v_min: -5.0
+  v_max: 20.0
+  width: 0.31
+  length: 0.58

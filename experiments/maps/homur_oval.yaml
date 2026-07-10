@@ -1,0 +1,6 @@
+image: homur_oval.png
+resolution: 0.010000
+origin: [-3.500000, -2.500000, 0.000000]
+negate: 0
+occupied_thresh: 0.45
+free_thresh: 0.196

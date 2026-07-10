@@ -46,7 +46,8 @@ ZOOM_OUT_FACTOR = 1/ZOOM_IN_FACTOR
 # vehicle shape constants
 CAR_LENGTH = 0.58
 CAR_WIDTH = 0.31
-MAX_RENDER_MAP_POINTS = 80000
+# 小規模な実験用地図では障害物を間引かずに描画できる上限にする。
+MAX_RENDER_MAP_POINTS = 250000
 
 class EnvRenderer(pyglet.window.Window):
     """
@@ -86,6 +87,10 @@ class EnvRenderer(pyglet.window.Window):
 
         # current env map
         self.map_points = None
+        self.map_vertex_list = None
+        self.map_point_size = 2.0
+        self.obstacle_color = (44, 52, 66)
+        self.show_fps = True
         
         # current env agent poses, (num_agents, 3), columns are (x, y, theta)
         self.poses = None
@@ -149,14 +154,27 @@ class EnvRenderer(pyglet.window.Window):
         map_z = np.zeros_like(map_x)
         map_points = 50. * np.column_stack((map_x, map_y, map_z))
 
-        colors = np.tile(np.array([44, 52, 66], dtype=np.uint8), map_points.shape[0])
-        self.batch.add(
+        colors = np.tile(np.array(self.obstacle_color, dtype=np.uint8), map_points.shape[0])
+        self.map_vertex_list = self.batch.add(
             map_points.shape[0],
             GL_POINTS,
             None,
             ('v3f/static', map_points.astype(np.float32).ravel().tolist()),
             ('c3B/static', colors.tolist()))
         self.map_points = map_points
+
+    def set_obstacle_color(self, color):
+        """障害物の描画色をRGB値で更新する。"""
+        if len(color) != 3:
+            raise ValueError("障害物の色はRGBの3要素で指定してください。")
+
+        self.obstacle_color = tuple(int(value) for value in color)
+        if self.map_vertex_list is not None:
+            colors = np.tile(
+                np.array(self.obstacle_color, dtype=np.uint8),
+                self.map_points.shape[0],
+            )
+            self.map_vertex_list.colors = colors.tolist()
 
     def on_resize(self, width, height):
         """
@@ -290,14 +308,15 @@ class EnvRenderer(pyglet.window.Window):
 
         # Clear window with ClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glPointSize(2.0)
+        glPointSize(self.map_point_size)
 
         # Set orthographic projection matrix
         glOrtho(self.left, self.right, self.bottom, self.top, 1, -1)
 
         # Draw all batches
         self.batch.draw()
-        self.fps_display.draw()
+        if self.show_fps:
+            self.fps_display.draw()
         # Remove default modelview matrix
         glPopMatrix()
 
