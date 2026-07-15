@@ -1,0 +1,66 @@
+run_name: homur_oval_mpc
+controller_type: mpc
+
+map_path: experiments/maps/homur_oval
+map_ext: .png
+wpt_path: experiments/maps/homur_oval_waypoints.csv
+
+sx: 3.0
+sy: 0.0
+stheta: 1.57079632679
+
+wpt_delim: ";"
+wpt_rowskip: 3
+wpt_xind: 1
+wpt_yind: 2
+wpt_thind: 3
+wpt_vind: 5
+
+num_agents: 1
+timestep: 0.01
+integrator: RK4
+lidar_dist: 0.0
+
+render:
+  window_width: 800
+  window_height: 600
+  camera_margin: 200
+  score_font_size: 18
+  fps_font_size: 14
+  show_fps: true
+  obstacle_point_size: 2.5
+  obstacle_color: [112, 120, 132]
+
+controller:
+  horizon: 8
+  target_speed: 1.0
+  maxiter: 20
+  position_weight: 4.0
+  heading_weight: 0.8
+  terminal_position_weight: 8.0
+  terminal_heading_weight: 1.5
+  steer_weight: 0.05
+  steer_delta_weight: 1.0
+  nominal_steer_weight: 2.5
+  tlad: 0.8
+  vgain: 1.0
+
+car_params:
+  mu: 1.0489
+  C_Sf: 4.718
+  C_Sr: 5.4562
+  lf: 0.15875
+  lr: 0.17145
+  h: 0.074
+  m: 3.74
+  I: 0.04712
+  s_min: -0.4189
+  s_max: 0.4189
+  sv_min: -3.2
+  sv_max: 3.2
+  v_switch: 7.319
+  a_max: 9.51
+  v_min: -5.0
+  v_max: 20.0
+  width: 0.31
+  length: 0.58

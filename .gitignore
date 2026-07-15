@@ -10,3 +10,16 @@ docs/_build/
 *.mypy_cache/
 flycheck_*
 gym_env/
+
+# Experiment results: keep raw runs local, keep curated reports in git.
+experiments/results/*.csv
+experiments/results/*_sum.svg
+experiments/results/*_view.md
+experiments/results/*.md
+experiments/results/raw/**
+experiments/results/runs/**
+!experiments/results/README.md
+!experiments/results/raw/.gitkeep
+!experiments/results/runs/.gitkeep
+!experiments/results/reports/
+!experiments/results/reports/**

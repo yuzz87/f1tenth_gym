@@ -14,12 +14,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from examples.waypoint_follow import PurePursuitPlanner, nearest_point_on_trajectory  # noqa: E402
+from examples.waypoint_follow import nearest_point_on_trajectory  # noqa: E402
+from experiments.controllers import create_controller  # noqa: E402
+from experiments.localization import create_localizer  # noqa: E402
 from f110_gym.envs.base_classes import Integrator  # noqa: E402
 
 
 def resolve_repo_path(path_text):
-    """リポジトリ直下からの相対パスを絶対パスへ変換する。"""
     path = Path(path_text)
     if path.is_absolute():
         return path
@@ -27,7 +28,6 @@ def resolve_repo_path(path_text):
 
 
 def load_config(config_path):
-    """YAML設定を読み込み、マップとwaypointのパスを絶対パスへ変換する。"""
     with open(config_path, encoding="utf-8") as file:
         conf_dict = yaml.safe_load(file)
 
@@ -37,7 +37,6 @@ def load_config(config_path):
 
 
 def get_integrator(name):
-    """設定ファイルの文字列からIntegrator enumを取得する。"""
     try:
         return getattr(Integrator, name)
     except AttributeError as exc:
@@ -46,13 +45,10 @@ def get_integrator(name):
 
 
 def normalize_angle(angle):
-    """角度を [-pi, pi) に正規化する。"""
     return (angle + np.pi) % (2.0 * np.pi) - np.pi
 
 
-class RunLogger:
-    """waypoint基準の追従誤差を計算し、CSVへ保存する。"""
-
+class LocalizedRunLogger:
     fieldnames = (
         "step",
         "sim_time",
@@ -61,6 +57,14 @@ class RunLogger:
         "pose_x",
         "pose_y",
         "pose_theta",
+        "est_pose_x",
+        "est_pose_y",
+        "est_pose_theta",
+        "est_error_x",
+        "est_error_y",
+        "est_error_theta",
+        "localization_score",
+        "localization_scan_error",
         "speed_cmd",
         "steer_cmd",
         "linear_vel_x",
@@ -76,16 +80,15 @@ class RunLogger:
         "done",
     )
 
-    def __init__(self, planner, config_name, run_name, results_dir):
-        self.planner = planner
+    def __init__(self, controller, config_name, run_name, results_dir):
         self.rows = []
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
         waypoint_xy = np.column_stack(
             (
-                planner.waypoints[:, planner.conf.wpt_xind],
-                planner.waypoints[:, planner.conf.wpt_yind],
+                controller.waypoints[:, controller.conf.wpt_xind],
+                controller.waypoints[:, controller.conf.wpt_yind],
             )
         )
         self.waypoint_xy = np.vstack((waypoint_xy, waypoint_xy[0]))
@@ -103,7 +106,6 @@ class RunLogger:
         self.output_path = self.results_dir / f"{stem}.csv"
 
     def compute_metrics(self, pose_x, pose_y, pose_theta):
-        """現在姿勢に対する中心線基準の誤差を返す。"""
         position = np.array([pose_x, pose_y])
         nearest_point, nearest_dist, t, segment_index = nearest_point_on_trajectory(
             position, self.waypoint_xy
@@ -120,7 +122,6 @@ class RunLogger:
         progress_distance = float(
             self.cumulative_lengths[segment_index] + t * self.segment_lengths[segment_index]
         )
-
         return {
             "cross_track_error": cross_track_error,
             "heading_error": heading_error,
@@ -130,39 +131,48 @@ class RunLogger:
             "ref_heading": float(ref_heading),
         }
 
-    def record(self, step, sim_time, obs, speed_cmd, steer_cmd, done):
-        """1 ステップ分の観測と指令値を保存する。"""
-        pose_x = float(obs["poses_x"][0])
-        pose_y = float(obs["poses_y"][0])
-        pose_theta = float(obs["poses_theta"][0])
+    def record(self, step, sim_time, gt_obs, est_pose, debug_info, speed_cmd, steer_cmd, done):
+        pose_x = float(gt_obs["poses_x"][0])
+        pose_y = float(gt_obs["poses_y"][0])
+        pose_theta = float(gt_obs["poses_theta"][0])
         metrics = self.compute_metrics(pose_x, pose_y, pose_theta)
+        est_pose_x = float(est_pose[0])
+        est_pose_y = float(est_pose[1])
+        est_pose_theta = float(est_pose[2])
         self.rows.append(
             {
                 "step": step,
                 "sim_time": float(sim_time),
-                "lap_count": int(obs["lap_counts"][0]),
-                "lap_time": float(obs["lap_times"][0]),
+                "lap_count": int(gt_obs["lap_counts"][0]),
+                "lap_time": float(gt_obs["lap_times"][0]),
                 "pose_x": pose_x,
                 "pose_y": pose_y,
                 "pose_theta": pose_theta,
+                "est_pose_x": est_pose_x,
+                "est_pose_y": est_pose_y,
+                "est_pose_theta": est_pose_theta,
+                "est_error_x": est_pose_x - pose_x,
+                "est_error_y": est_pose_y - pose_y,
+                "est_error_theta": normalize_angle(est_pose_theta - pose_theta),
+                "localization_score": float(debug_info.get("localization_score", 0.0)),
+                "localization_scan_error": float(debug_info.get("scan_error", 0.0)),
                 "speed_cmd": float(speed_cmd),
                 "steer_cmd": float(steer_cmd),
-                "linear_vel_x": float(obs["linear_vels_x"][0]),
-                "linear_vel_y": float(obs["linear_vels_y"][0]),
-                "ang_vel_z": float(obs["ang_vels_z"][0]),
+                "linear_vel_x": float(gt_obs["linear_vels_x"][0]),
+                "linear_vel_y": float(gt_obs["linear_vels_y"][0]),
+                "ang_vel_z": float(gt_obs["ang_vels_z"][0]),
                 "cross_track_error": metrics["cross_track_error"],
                 "heading_error": metrics["heading_error"],
                 "progress_distance": metrics["progress_distance"],
                 "ref_x": metrics["ref_x"],
                 "ref_y": metrics["ref_y"],
                 "ref_heading": metrics["ref_heading"],
-                "collision": int(obs["collisions"][0]),
+                "collision": int(gt_obs["collisions"][0]),
                 "done": int(done),
             }
         )
 
     def write(self):
-        """保存済み行を CSV ファイルへ書き出す。"""
         with self.output_path.open("w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=self.fieldnames)
             writer.writeheader()
@@ -170,40 +180,29 @@ class RunLogger:
         return self.output_path
 
 
+def build_estimated_obs(gt_obs, est_pose):
+    estimated_obs = dict(gt_obs)
+    estimated_obs["poses_x"] = list(gt_obs["poses_x"])
+    estimated_obs["poses_y"] = list(gt_obs["poses_y"])
+    estimated_obs["poses_theta"] = list(gt_obs["poses_theta"])
+    estimated_obs["poses_x"][0] = float(est_pose[0])
+    estimated_obs["poses_y"][0] = float(est_pose[1])
+    estimated_obs["poses_theta"][0] = float(est_pose[2])
+    return estimated_obs
+
+
 def main():
-    parser = ArgumentParser(description="自分用設定でF1TENTH Gymを実行する。")
+    parser = ArgumentParser(description="LiDAR map localization を介して controller を動かす実験ランナー。")
     parser.add_argument(
         "--config",
-        default="experiments/configs/homur_f110.yaml",
+        default="experiments/configs/homur_oval_localized_pure_pursuit.yaml",
         help="リポジトリ直下から見た設定ファイルのパス。",
     )
-    parser.add_argument(
-        "--no-render",
-        action="store_true",
-        help="GUI描画を行わずに実行する。動作確認やログ確認向け。",
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=0,
-        help="最大ステップ数。0なら終了条件まで走らせる。",
-    )
-    parser.add_argument(
-        "--results-dir",
-        default="experiments/results",
-        help="CSVログを保存するフォルダ。",
-    )
-    parser.add_argument(
-        "--no-log",
-        action="store_true",
-        help="CSVログを保存しない。",
-    )
-    parser.add_argument(
-        "--lap-target",
-        type=int,
-        default=0,
-        help="指定周回数に到達したら終了する。0なら無効。",
-    )
+    parser.add_argument("--no-render", action="store_true", help="GUI描画を行わずに実行する。")
+    parser.add_argument("--max-steps", type=int, default=0, help="最大ステップ数。0なら無効。")
+    parser.add_argument("--results-dir", default="experiments/results", help="CSVログを保存するフォルダ。")
+    parser.add_argument("--no-log", action="store_true", help="CSVログを保存しない。")
+    parser.add_argument("--lap-target", type=int, default=0, help="指定周回数に到達したら終了する。")
     args = parser.parse_args()
 
     config_path = resolve_repo_path(args.config)
@@ -211,11 +210,8 @@ def main():
     config_name = Path(args.config).stem
 
     car_params = conf.car_params
-    controller = conf.controller
     render = getattr(conf, "render", {})
-    wheelbase = car_params["lf"] + car_params["lr"]
-
-    planner = PurePursuitPlanner(conf, wheelbase)
+    controller = create_controller(conf, car_params)
     env = gym.make(
         "f110_gym:f110-v0",
         map=conf.map_path,
@@ -226,6 +222,8 @@ def main():
         params=car_params,
         lidar_dist=conf.lidar_dist,
     )
+    scan_angles = env.sim.agents[0].scan_angles
+    localizer = create_localizer(conf, scan_angles)
 
     if not args.no_render:
         camera_margin = render.get("camera_margin", 800)
@@ -235,14 +233,9 @@ def main():
         render_style_applied = False
 
         def render_callback(env_renderer):
-            """車両を追従するカメラ設定とwaypoint描画を行う。"""
             nonlocal render_style_applied, window_size_applied
 
-            if (
-                not window_size_applied
-                and window_width is not None
-                and window_height is not None
-            ):
+            if not window_size_applied and window_width is not None and window_height is not None:
                 env_renderer.set_size(int(window_width), int(window_height))
                 window_size_applied = True
 
@@ -267,19 +260,30 @@ def main():
             env_renderer.right = right + camera_margin
             env_renderer.top = top + camera_margin
             env_renderer.bottom = bottom - camera_margin
-
-            planner.render_waypoints(env_renderer)
+            controller.render_waypoints(env_renderer)
 
         env.add_render_callback(render_callback)
 
-    obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
+    gt_obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
+    del step_reward, info
+    est_pose = localizer.initialize(np.array([conf.sx, conf.sy, conf.stheta], dtype=float))
+    est_obs = build_estimated_obs(gt_obs, est_pose)
+    debug_info = localizer.debug_info()
+
     run_logger = None
     if not args.no_log:
-        run_logger = RunLogger(planner, config_name, conf.run_name, resolve_repo_path(args.results_dir))
+        run_logger = LocalizedRunLogger(
+            controller,
+            config_name,
+            conf.run_name,
+            resolve_repo_path(args.results_dir),
+        )
         run_logger.record(
             step=0,
             sim_time=0.0,
-            obs=obs,
+            gt_obs=gt_obs,
+            est_pose=est_pose,
+            debug_info=debug_info,
             speed_cmd=0.0,
             steer_cmd=0.0,
             done=done,
@@ -288,27 +292,29 @@ def main():
     if not args.no_render:
         env.render()
 
-    laptime = 0.0
+    sim_elapsed_time = 0.0
     step_count = 0
     start = time.time()
     lap_target_reached = False
 
     while not done:
-        speed, steer = planner.plan(
-            obs["poses_x"][0],
-            obs["poses_y"][0],
-            obs["poses_theta"][0],
-            controller["tlad"],
-            controller["vgain"],
-        )
-        obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
-        laptime += step_reward
+        speed, steer = controller.plan(est_obs)
+        gt_obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
+        del info
+        sim_elapsed_time += step_reward
         step_count += 1
+
+        est_pose = localizer.update(gt_obs, control={"speed_cmd": speed, "steer_cmd": steer})
+        est_obs = build_estimated_obs(gt_obs, est_pose)
+        debug_info = localizer.debug_info()
+
         if run_logger is not None:
             run_logger.record(
                 step=step_count,
-                sim_time=laptime,
-                obs=obs,
+                sim_time=sim_elapsed_time,
+                gt_obs=gt_obs,
+                est_pose=est_pose,
+                debug_info=debug_info,
                 speed_cmd=speed,
                 steer_cmd=steer,
                 done=done,
@@ -317,7 +323,7 @@ def main():
         if not args.no_render:
             env.render(mode="human")
 
-        if args.lap_target > 0 and int(obs["lap_counts"][0]) >= args.lap_target:
+        if args.lap_target > 0 and int(gt_obs["lap_counts"][0]) >= args.lap_target:
             lap_target_reached = True
             break
 
@@ -325,13 +331,17 @@ def main():
             break
 
     print(f"run_name: {conf.run_name}")
+    print(f"controller_type: {getattr(conf, 'controller_type', 'pure_pursuit')}")
+    print(f"localizer_type: {conf.localizer.get('type', 'map_localizer')}")
     print(f"steps: {step_count}")
-    print(f"sim_elapsed_time: {laptime}")
+    print(f"sim_elapsed_time: {sim_elapsed_time}")
     print(f"real_elapsed_time: {time.time() - start}")
     print(f"done: {done}")
-    print(f"lap_count: {int(obs['lap_counts'][0])}")
-    print(f"lap_time: {float(obs['lap_times'][0])}")
+    print(f"lap_count: {int(gt_obs['lap_counts'][0])}")
+    print(f"lap_time: {float(gt_obs['lap_times'][0])}")
     print(f"lap_target_reached: {lap_target_reached}")
+    print(f"est_pose: {est_pose.tolist()}")
+    print(f"localization_score: {debug_info.get('localization_score', 0.0)}")
     if run_logger is not None:
         log_path = run_logger.write()
         print(f"log_csv: {log_path}")

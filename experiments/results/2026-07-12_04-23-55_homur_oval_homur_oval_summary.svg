@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1180" viewBox="0 0 1100 1180">
+<rect width="100%" height="100%" fill="#f3f4f6"/>
+<text x="40" y="42" font-size="24" font-family="monospace" fill="#24292f">F1TENTH baseline run summary</text>
+<rect x="40" y="70" width="1020" height="360" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="52" y="94" font-size="16" font-family="monospace" fill="#24292f">Trajectory vs Centerline</text>
+<rect x="100" y="106" width="930" height="284" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+<polyline fill="none" stroke="#1f883d" stroke-width="2" points="965.86,370.41 965.60,370.24 963.79,369.04 959.46,366.16 952.72,361.69 943.70,355.70 932.51,348.26 919.23,339.45 903.99,329.32 886.86,317.94 867.93,305.37 847.30,291.67 825.04,276.89 801.23,261.08 775.95,244.28 749.26,226.56 721.26,207.96 692.05,188.56 661.68,168.39 630.19,147.48 556.03,125.59"/>
+<polyline fill="none" stroke="#0969da" stroke-width="2" points="965.86,370.41 965.86,370.24 965.86,369.04 965.86,366.16 965.82,361.68 965.67,355.69 965.22,348.25 964.19,339.43 962.19,329.30 958.69,317.91 953.10,305.34 945.06,291.63 933.99,276.85 919.53,261.03 901.06,244.24 878.25,226.51 819.37,207.92 693.51,188.56 534.96,168.44 360.45,147.58 164.14,126.03"/>
+<text x="100" y="418" font-size="12" font-family="monospace" fill="#57606a">x [3.00, 3.00] m</text>
+<text x="48" y="118" font-size="12" font-family="monospace" fill="#57606a">y [-0.01, 0.07] m</text>
+<rect x="40" y="460" width="1020" height="280" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="52" y="484" font-size="16" font-family="monospace" fill="#24292f">Cross-track and Heading Error</text>
+<rect x="100" y="496" width="930" height="204" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+<line x1="100" y1="554.65" x2="1030" y2="554.65" stroke="#8c959f" stroke-width="1" stroke-dasharray="4 4"/>
+<polyline fill="none" stroke="#d1242f" stroke-width="2" points="100.00,554.65 146.50,554.65 193.00,554.69 239.50,554.76 286.00,554.88 332.50,555.03 379.00,555.22 425.50,555.44 472.00,555.67 518.50,555.91 565.00,556.14 611.50,556.36 658.00,556.56 704.50,556.72 751.00,556.84 797.50,556.91 844.00,556.37 890.50,554.67 937.00,552.43 983.50,549.93 1030.00,547.77"/>
+<polyline fill="none" stroke="#8250df" stroke-width="2" points="100.00,650.64 146.50,650.64 193.00,650.64 239.50,650.47 286.00,649.74 332.50,648.11 379.00,645.29 425.50,640.99 472.00,634.94 518.50,626.87 565.00,617.98 611.50,608.27 658.00,597.81 704.50,586.61 751.00,574.73 797.50,562.17 844.00,549.17 890.50,537.52 937.00,523.75 983.50,510.07 1030.00,685.93"/>
+<line x1="104" y1="508" x2="122" y2="508" stroke="#d1242f" stroke-width="3"/>
+<text x="128" y="512" font-size="12" font-family="monospace" fill="#24292f">cross_track_error [m]</text>
+<line x1="104" y1="526" x2="122" y2="526" stroke="#8250df" stroke-width="3"/>
+<text x="128" y="530" font-size="12" font-family="monospace" fill="#24292f">heading_error [rad]</text>
+<text x="100" y="728" font-size="12" font-family="monospace" fill="#57606a">time [0.00, 0.20] s</text>
+<text x="48" y="508" font-size="12" font-family="monospace" fill="#57606a">y [-0.036, 0.015]</text>
+<rect x="40" y="770" width="1020" height="280" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="52" y="794" font-size="16" font-family="monospace" fill="#24292f">Control and Velocity</text>
+<rect x="100" y="806" width="930" height="204" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+<line x1="100" y1="995.93" x2="1030" y2="995.93" stroke="#8c959f" stroke-width="1" stroke-dasharray="4 4"/>
+<polyline fill="none" stroke="#1a7f37" stroke-width="2" points="100.00,995.93 146.50,820.07 193.00,820.07 239.50,820.07 286.00,820.07 332.50,820.07 379.00,820.07 425.50,820.07 472.00,820.07 518.50,820.07 565.00,820.07 611.50,820.07 658.00,820.07 704.50,820.07 751.00,820.07 797.50,820.07 844.00,820.07 890.50,820.07 937.00,820.07 983.50,820.07 1030.00,820.07"/>
+<polyline fill="none" stroke="#0969da" stroke-width="2" points="100.00,995.93 146.50,957.56 193.00,957.56 239.50,957.56 286.00,957.56 332.50,957.58 379.00,957.64 425.50,957.72 472.00,957.86 518.50,958.05 565.00,958.31 611.50,958.58 658.00,958.89 704.50,959.21 751.00,959.56 797.50,959.92 844.00,960.31 890.50,954.62 937.00,955.07 983.50,955.60 1030.00,956.14"/>
+<polyline fill="none" stroke="#bf8700" stroke-width="2" points="100.00,995.93 146.50,994.26 193.00,985.98 239.50,978.09 286.00,970.57 332.50,963.42 379.00,956.60 425.50,950.11 472.00,943.93 518.50,938.04 565.00,932.43 611.50,927.08 658.00,922.00 704.50,917.15 751.00,912.53 797.50,908.14 844.00,903.95 890.50,899.96 937.00,896.16 983.50,892.54 1030.00,889.10"/>
+<line x1="104" y1="818" x2="122" y2="818" stroke="#1a7f37" stroke-width="3"/>
+<text x="128" y="822" font-size="12" font-family="monospace" fill="#24292f">speed_cmd [m/s]</text>
+<line x1="104" y1="836" x2="122" y2="836" stroke="#0969da" stroke-width="3"/>
+<text x="128" y="840" font-size="12" font-family="monospace" fill="#24292f">steer_cmd [rad]</text>
+<line x1="104" y1="854" x2="122" y2="854" stroke="#bf8700" stroke-width="3"/>
+<text x="128" y="858" font-size="12" font-family="monospace" fill="#24292f">linear_vel_x [m/s]</text>
+<text x="100" y="1038" font-size="12" font-family="monospace" fill="#57606a">time [0.00, 0.20] s</text>
+<text x="48" y="818" font-size="12" font-family="monospace" fill="#57606a">y [-0.080, 1.080]</text>
+</svg>
