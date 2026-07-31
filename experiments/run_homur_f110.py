@@ -72,6 +72,13 @@ class RunLogger:
         "ref_x",
         "ref_y",
         "ref_heading",
+        "scan_min",
+        "scan_mean",
+        "scan_max",
+        "scan_updated",
+        "scan_time",
+        "scan_age",
+        "scan_update_count",
         "collision",
         "done",
     )
@@ -136,6 +143,7 @@ class RunLogger:
         pose_y = float(obs["poses_y"][0])
         pose_theta = float(obs["poses_theta"][0])
         metrics = self.compute_metrics(pose_x, pose_y, pose_theta)
+        scan = np.asarray(obs["scans"][0], dtype=float)
         self.rows.append(
             {
                 "step": step,
@@ -156,6 +164,13 @@ class RunLogger:
                 "ref_x": metrics["ref_x"],
                 "ref_y": metrics["ref_y"],
                 "ref_heading": metrics["ref_heading"],
+                "scan_min": float(np.min(scan)),
+                "scan_mean": float(np.mean(scan)),
+                "scan_max": float(np.max(scan)),
+                "scan_updated": int(obs["scan_updated"][0]),
+                "scan_time": float(obs["scan_times"][0]),
+                "scan_age": float(obs["scan_ages"][0]),
+                "scan_update_count": int(obs["scan_update_counts"][0]),
                 "collision": int(obs["collisions"][0]),
                 "done": int(done),
             }
@@ -225,6 +240,7 @@ def main():
         integrator=get_integrator(conf.integrator),
         params=car_params,
         lidar_dist=conf.lidar_dist,
+        lidar_config=getattr(conf, "lidar", None),
     )
 
     if not args.no_render:

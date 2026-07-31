@@ -1,0 +1,13 @@
+map_name: curtain_test_area_02
+created_at: 2026-07-27T20:27:50+09:00
+map_frame: map
+odom_frame: odom
+base_frame: base_link
+laser_frame: laser
+resolution_m_per_cell: 0.05
+lidar_range_m: [0.15, 6.0]
+lidar_rear_mask_deg: 30.0
+lidar_transform_xyz_m: [0.25, 0.0, 0.11]
+lidar_yaw_rad: 0.0
+encoder_distance_per_count_m: 0.001415428167021
+mapping_method: slam_toolbox_online_async_hand_push

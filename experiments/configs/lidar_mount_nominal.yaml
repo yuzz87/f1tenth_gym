@@ -1,0 +1,6 @@
+# 実機未接続時の暫定値。実測したbase_link -> laserの値で置き換える。
+source: provisional_simulation
+x_offset: 0.0
+y_offset: 0.0
+z_offset: 0.0
+yaw_offset: 0.0

@@ -1,10 +1,15 @@
 # ESC duty比・速度実測データ
 
+> **現在の扱い:** このファイルの速度値は旧試験の参考データであり、
+> 現在の実機制御の速度校正には使用しない。現在はエンコーダ速度とdutyを
+> 直接対応付けず、停止・発進・安全境界を別に管理する。
+
 ## 目的
 
 ESCへ出力するPWM duty比[%]と、実車速度[m/s]の対応関係を記録する。
 
-このデータは、速度指令[m/s]をESC duty比[%]へ変換するための校正値として使う。
+過去には速度指令[m/s]をESC duty比[%]へ変換する校正値として使っていた。
+現在の実装では、エンコーダ由来の速度を制御校正へ使わない。
 
 ## 前提
 
@@ -72,6 +77,17 @@ error_mps = predicted_velocity_mps - measured_velocity_mps
 
 ## 使用上の注意
 
+この表は複数回の再現性が確認された確定校正ではない。現在の実機用の操作境界は
+次で管理する。
+
+```text
+stop/idle duty: 10.30 %
+reliable start duty: 10.16 %
+hardware forward-side limit: 10.10 %
+```
+
+以下の速度表は旧データとして保存するが、MPC/MPPIの速度入力へ直接使わない。
+
 この近似式の実測範囲は次である。
 
 ```text
@@ -80,7 +96,8 @@ error_mps = predicted_velocity_mps - measured_velocity_mps
 ```
 
 `0.10 m/s` や `0.30 m/s` のような低速指令は、現在の実測範囲外である。
-低速走行確認で使う場合は、ESC中立 `10.55 %` に近い duty比で追加測定する。
+旧試験時の中立値は`10.55 %`として記録されていたが、現在の停止・待機値は
+`10.30 %`である。両者を混同しない。
 
 追加測定候補:
 
@@ -97,5 +114,5 @@ error_mps = predicted_velocity_mps - measured_velocity_mps
 現在のESC中立候補:
 
 ```text
-ESC neutral duty = 10.55 %
+旧試験のESC neutral duty = 10.55 %
 ```

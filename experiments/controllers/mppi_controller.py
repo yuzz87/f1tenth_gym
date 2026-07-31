@@ -1,4 +1,5 @@
 import numpy as np
+import numpy as np
 
 from examples.waypoint_follow import PurePursuitPlanner, nearest_point_on_trajectory
 
@@ -25,8 +26,17 @@ class MPPIController(BaseController):
         self.control_weight = float(self.controller_conf.get("control_weight", 0.02))
         self.delta_weight = float(self.controller_conf.get("delta_weight", 0.8))
         self.nominal_weight = float(self.controller_conf.get("nominal_weight", 1.2))
-        self.steer_min = float(car_params["s_min"])
-        self.steer_max = float(car_params["s_max"])
+        self.rollout_model = "kinematic_bicycle"
+        configured_steer_limit = self.controller_conf.get("steer_limit")
+        if configured_steer_limit is None:
+            self.steer_min = float(car_params["s_min"])
+            self.steer_max = float(car_params["s_max"])
+        else:
+            steer_limit = abs(float(configured_steer_limit))
+            self.steer_min = max(float(car_params["s_min"]), -steer_limit)
+            self.steer_max = min(float(car_params["s_max"]), steer_limit)
+            if self.steer_min >= self.steer_max:
+                raise ValueError("controller.steer_limit must leave a valid range")
         self.timestep = float(conf.timestep)
         self.prev_sequence = np.zeros((self.horizon,), dtype=float)
         self.rng = np.random.default_rng(int(self.controller_conf.get("seed", 7)))

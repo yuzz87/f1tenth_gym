@@ -48,6 +48,7 @@ from gym.utils import seeding
 
 # シミュレータ本体と積分器
 from f110_gym.envs.base_classes import Integrator, Simulator
+from f110_gym.envs.lidar_config import resolve_lidar_config
 
 pyglet.options["debug_gl"] = False
 from pyglet import gl
@@ -104,6 +105,8 @@ class F110Env(gym.Env):
             ego_idx (int, default=0): 自車として扱う車両のインデックス。
 
             lidar_dist (float, default=0): 後輪軸からLiDARまでの距離。
+
+            lidar_config (dict or str, optional): LiDARプロファイル名または設定。
     """
 
     metadata = {"render.modes": ["human", "human_fast"]}
@@ -199,6 +202,9 @@ class F110Env(gym.Env):
         except:
             self.lidar_dist = 0.0
 
+        # 未指定時は従来のLiDAR設定を維持し、YAMLからA1プロファイルを選べるようにする。
+        self.lidar_config = resolve_lidar_config(kwargs.get("lidar_config"))
+
         # スタート近傍とみなす半径
         self.start_thresh = 0.5  # 10cm
 
@@ -237,6 +243,7 @@ class F110Env(gym.Env):
             time_step=self.timestep,
             integrator=self.integrator,
             lidar_dist=self.lidar_dist,
+            lidar_config=self.lidar_config,
         )
         self.sim.set_map(self.map_path, self.map_ext)
 

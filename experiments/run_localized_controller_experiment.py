@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 from examples.waypoint_follow import nearest_point_on_trajectory  # noqa: E402
 from experiments.controllers import create_controller  # noqa: E402
 from experiments.localization import create_localizer  # noqa: E402
+from experiments.render_lidar_control_overlay import LidarControlOverlay  # noqa: E402
 from f110_gym.envs.base_classes import Integrator  # noqa: E402
 
 
@@ -67,6 +68,8 @@ class LocalizedRunLogger:
         "localization_scan_error",
         "speed_cmd",
         "steer_cmd",
+        "controller_plan_time_s",
+        "localizer_update_time_s",
         "linear_vel_x",
         "linear_vel_y",
         "ang_vel_z",
@@ -76,6 +79,15 @@ class LocalizedRunLogger:
         "ref_x",
         "ref_y",
         "ref_heading",
+        "scan_min",
+        "scan_mean",
+        "scan_max",
+        "scan_updated",
+        "scan_time",
+        "scan_age",
+        "scan_update_count",
+        "scan_valid_count",
+        "scan_valid_ratio",
         "collision",
         "done",
     )
@@ -131,11 +143,28 @@ class LocalizedRunLogger:
             "ref_heading": float(ref_heading),
         }
 
-    def record(self, step, sim_time, gt_obs, est_pose, debug_info, speed_cmd, steer_cmd, done):
+    def record(
+        self,
+        step,
+        sim_time,
+        gt_obs,
+        est_pose,
+        debug_info,
+        speed_cmd,
+        steer_cmd,
+        done,
+        controller_plan_time_s=0.0,
+        localizer_update_time_s=0.0,
+    ):
         pose_x = float(gt_obs["poses_x"][0])
         pose_y = float(gt_obs["poses_y"][0])
         pose_theta = float(gt_obs["poses_theta"][0])
         metrics = self.compute_metrics(pose_x, pose_y, pose_theta)
+        scan = np.asarray(gt_obs["scans"][0], dtype=float)
+        scan_valid = np.asarray(
+            gt_obs.get("scan_valid", [np.ones(scan.shape, dtype=bool)])[0],
+            dtype=bool,
+        )
         est_pose_x = float(est_pose[0])
         est_pose_y = float(est_pose[1])
         est_pose_theta = float(est_pose[2])
@@ -158,6 +187,8 @@ class LocalizedRunLogger:
                 "localization_scan_error": float(debug_info.get("scan_error", 0.0)),
                 "speed_cmd": float(speed_cmd),
                 "steer_cmd": float(steer_cmd),
+                "controller_plan_time_s": float(controller_plan_time_s),
+                "localizer_update_time_s": float(localizer_update_time_s),
                 "linear_vel_x": float(gt_obs["linear_vels_x"][0]),
                 "linear_vel_y": float(gt_obs["linear_vels_y"][0]),
                 "ang_vel_z": float(gt_obs["ang_vels_z"][0]),
@@ -167,6 +198,15 @@ class LocalizedRunLogger:
                 "ref_x": metrics["ref_x"],
                 "ref_y": metrics["ref_y"],
                 "ref_heading": metrics["ref_heading"],
+                "scan_min": float(np.min(scan)),
+                "scan_mean": float(np.mean(scan)),
+                "scan_max": float(np.max(scan)),
+                "scan_updated": int(gt_obs["scan_updated"][0]),
+                "scan_time": float(gt_obs["scan_times"][0]),
+                "scan_age": float(gt_obs["scan_ages"][0]),
+                "scan_update_count": int(gt_obs["scan_update_counts"][0]),
+                "scan_valid_count": int(np.sum(scan_valid)),
+                "scan_valid_ratio": float(np.mean(scan_valid)),
                 "collision": int(gt_obs["collisions"][0]),
                 "done": int(done),
             }
@@ -221,9 +261,26 @@ def main():
         integrator=get_integrator(conf.integrator),
         params=car_params,
         lidar_dist=conf.lidar_dist,
+        lidar_config=getattr(conf, "lidar", None),
     )
     scan_angles = env.sim.agents[0].scan_angles
     localizer = create_localizer(conf, scan_angles)
+    localizer_update_mode = getattr(conf, "localizer", {}).get(
+        "update_mode", "every_step"
+    )
+    if localizer_update_mode not in ("every_step", "on_scan_update"):
+        raise ValueError(
+            "localizer.update_mode must be 'every_step' or 'on_scan_update'"
+        )
+    visual_state = {
+        "obs": None,
+        "est_pose": None,
+        "speed_cmd": 0.0,
+        "steer_cmd": 0.0,
+        "controller_type": getattr(conf, "controller_type", "unknown"),
+        "lidar_dist": conf.lidar_dist,
+        "lidar_config": getattr(conf, "lidar", None),
+    }
 
     if not args.no_render:
         camera_margin = render.get("camera_margin", 800)
@@ -263,12 +320,21 @@ def main():
             controller.render_waypoints(env_renderer)
 
         env.add_render_callback(render_callback)
+        overlay = LidarControlOverlay(
+            scan_angles,
+            visual_state,
+            range_max=float(env.sim.lidar_config["range_max"]),
+            beam_stride=int(render.get("lidar_beam_stride", 4)),
+        )
+        env.add_render_callback(overlay.render_callback)
 
     gt_obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     del step_reward, info
     est_pose = localizer.initialize(np.array([conf.sx, conf.sy, conf.stheta], dtype=float))
     est_obs = build_estimated_obs(gt_obs, est_pose)
     debug_info = localizer.debug_info()
+    visual_state["obs"] = gt_obs
+    visual_state["est_pose"] = est_pose
 
     run_logger = None
     if not args.no_log:
@@ -304,9 +370,26 @@ def main():
         sim_elapsed_time += step_reward
         step_count += 1
 
-        est_pose = localizer.update(gt_obs, control={"speed_cmd": speed, "steer_cmd": steer})
+        should_match_scan = (
+            localizer_update_mode == "every_step"
+            or bool(gt_obs["scan_updated"][0])
+        )
+        if should_match_scan:
+            est_pose = localizer.update(
+                gt_obs,
+                control={"speed_cmd": speed, "steer_cmd": steer},
+            )
+        else:
+            est_pose = localizer.predict(
+                gt_obs,
+                control={"speed_cmd": speed, "steer_cmd": steer},
+            )
         est_obs = build_estimated_obs(gt_obs, est_pose)
         debug_info = localizer.debug_info()
+        visual_state["obs"] = gt_obs
+        visual_state["est_pose"] = est_pose
+        visual_state["speed_cmd"] = speed
+        visual_state["steer_cmd"] = steer
 
         if run_logger is not None:
             run_logger.record(

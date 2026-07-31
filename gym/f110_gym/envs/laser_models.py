@@ -155,7 +155,7 @@ def trace_ray(x, y, theta_index, sines, cosines, eps, orig_x, orig_y, orig_c, or
     return total_dist
 
 @njit(cache=True)
-def get_scan(pose, theta_dis, fov, num_beams, theta_index_increment, sines, cosines, eps, orig_x, orig_y, orig_c, orig_s, height, width, resolution, dt, max_range):
+def get_scan(pose, theta_dis, fov, num_beams, theta_index_increment, sines, cosines, eps, orig_x, orig_y, orig_c, orig_s, height, width, resolution, dt, max_range, angle_min=None):
     """
     Perform the scan for each discretized angle of each beam of the laser, loop heavy, should be JITted
 
@@ -173,9 +173,10 @@ def get_scan(pose, theta_dis, fov, num_beams, theta_index_increment, sines, cosi
     # 各ビームの距離を格納する配列。
     scan = np.empty((num_beams,))
 
-    # poseの向きとFOVから、最初のビーム角を離散角度indexへ変換する。
-    # make theta discrete by mapping the range [-pi, pi] onto [0, theta_dis]
-    theta_index = theta_dis * (pose[2] - fov/2.)/(2. * np.pi)
+    # 最初のビーム角を離散角度indexへ変換する。
+    # angle_min未指定時は、従来どおりFOVの中央を0 radとする。
+    first_angle = -fov / 2.0 if angle_min is None else angle_min
+    theta_index = theta_dis * (pose[2] + first_angle)/(2. * np.pi)
 
     # make sure it's wrapped properly
     theta_index = np.fmod(theta_index, theta_dis)
@@ -376,9 +377,14 @@ class ScanSimulator2D(object):
         eps (float, default=0.0001): ray tracing iteration termination condition
         theta_dis (int, default=2000): number of steps to discretize the angles between 0 and 2pi for look up
         max_range (float, default=30.0): maximum range of the laser
+        range_min (float, default=0.0): minimum valid range of the laser
+        angle_min (float, optional): angle of the first beam relative to the scan frame
     """
 
-    def __init__(self, num_beams, fov, eps=0.0001, theta_dis=2000, max_range=30.0):
+    def __init__(self, num_beams, fov, eps=0.0001, theta_dis=2000,
+                 max_range=30.0, range_min=0.0, angle_min=None,
+                 noise_std=0.01, noise_std_per_meter=0.0,
+                 dropout_probability=0.0):
         # initialization
         # LiDARのビーム数、視野角、最大レンジ、ray tracing停止条件を保存する。
         self.num_beams = num_beams
@@ -386,6 +392,12 @@ class ScanSimulator2D(object):
         self.eps = eps
         self.theta_dis = theta_dis
         self.max_range = max_range
+        self.range_min = range_min
+        self.angle_min = -fov / 2.0 if angle_min is None else angle_min
+        self.angle_max = self.angle_min + self.fov
+        self.noise_std = noise_std
+        self.noise_std_per_meter = noise_std_per_meter
+        self.dropout_probability = dropout_probability
         self.angle_increment = self.fov / (self.num_beams - 1)
         self.theta_index_increment = theta_dis * self.angle_increment / (2. * np.pi)
         self.orig_c = None
@@ -396,6 +408,13 @@ class ScanSimulator2D(object):
         self.map_width = None
         self.map_resolution = None
         self.dt = None
+
+        # 設定と同じ定義で、各ビームの角度を保持する。
+        self.scan_angles = np.linspace(
+            self.angle_min,
+            self.angle_max,
+            num=self.num_beams,
+        )
         
         # precomputing corresponding cosines and sines of the angle array
         # 各ビームで毎回 sin/cos を計算しないよう、離散角度テーブルを事前計算する。
@@ -454,14 +473,17 @@ class ScanSimulator2D(object):
 
         return True
 
-    def scan(self, pose, rng, std_dev=0.01):
+    def scan(self, pose, rng, std_dev=None, noise_std_per_meter=None,
+             dropout_probability=None, return_valid_mask=False):
         """
         Perform simulated 2D scan by pose on the given map
 
             Args:
                 pose (numpy.ndarray (3, )): pose of the scan frame (x, y, theta)
                 rng (numpy.random.Generator): random number generator to use for whitenoise in scan, or None
-                std_dev (float, default=0.01): standard deviation of the generated whitenoise in the scan
+                std_dev (float, optional): base standard deviation of the noise
+                noise_std_per_meter (float, optional): distance-dependent noise coefficient
+                dropout_probability (float, optional): probability of an invalid beam
 
             Returns:
                 scan (numpy.ndarray (n, )): data array of the laserscan, n=num_beams
@@ -474,13 +496,33 @@ class ScanSimulator2D(object):
             raise ValueError('Map is not set for scan simulator.')
         
         # 現在姿勢から全ビームの距離を計算する。
-        scan = get_scan(pose, self.theta_dis, self.fov, self.num_beams, self.theta_index_increment, self.sines, self.cosines, self.eps, self.orig_x, self.orig_y, self.orig_c, self.orig_s, self.map_height, self.map_width, self.map_resolution, self.dt, self.max_range)
+        scan = get_scan(pose, self.theta_dis, self.fov, self.num_beams, self.theta_index_increment, self.sines, self.cosines, self.eps, self.orig_x, self.orig_y, self.orig_c, self.orig_s, self.map_height, self.map_width, self.map_resolution, self.dt, self.max_range, self.angle_min)
 
-        if rng is not None:
+        if std_dev is None:
+            std_dev = self.noise_std
+        if noise_std_per_meter is None:
+            noise_std_per_meter = self.noise_std_per_meter
+        if dropout_probability is None:
+            dropout_probability = self.dropout_probability
+
+        if rng is not None and (std_dev > 0.0 or noise_std_per_meter > 0.0):
             # 実LiDARに近づけるため、必要に応じて白色ノイズを加える。
-            noise = rng.normal(0., std_dev, size=self.num_beams)
+            noise_std = std_dev + noise_std_per_meter * np.maximum(scan, 0.0)
+            noise = rng.normal(0., noise_std, size=self.num_beams)
             scan += noise
-            
+
+        # 実LiDARの有効測距範囲に収める。
+        scan = np.clip(scan, self.range_min, self.max_range)
+
+        valid_mask = np.ones(self.num_beams, dtype=bool)
+        if rng is not None and dropout_probability > 0.0:
+            # 欠損値は、距離上限まで届かなかった観測として扱う。
+            dropout_mask = rng.random(self.num_beams) < dropout_probability
+            scan[dropout_mask] = self.max_range
+            valid_mask[dropout_mask] = False
+
+        if return_valid_mask:
+            return scan, valid_mask
         return scan
 
     def get_increment(self):

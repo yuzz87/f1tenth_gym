@@ -1,0 +1,114 @@
+vehicle:
+  wheelbase_m: 0.25
+  wheel_diameter_m: 0.066
+  # Encoder hardware specification before quadrature decoding.
+  encoder_teeth: 36
+
+limits:
+  speed_min_mps: 0.0
+  speed_max_mps: 0.30
+  steer_min_rad: -0.3141592653589793
+  steer_max_rad: 0.3141592653589793
+  steer_rate_min_rad_s: -0.70
+  steer_rate_max_rad_s: 0.70
+
+calibration:
+  pwm_frequency_hz: 70.0
+  steering:
+    angle_rad_per_duty: -0.186785136654
+    angle_rad_intercept: 2.018473280947
+    neutral_duty_percent: 10.895
+    measured_duty_min_percent: 9.05
+    measured_duty_max_percent: 12.42
+  esc:
+    # 実機試験に基づく操作境界。速度校正式は使用しない。
+    stop_duty_percent: 10.30
+    start_duty_percent: 10.16
+    forward_min_duty_percent: 10.10
+    pwm_direction: "lower_duty_is_stronger_forward"
+  encoder:
+    wheel_diameter_m: 0.066
+    raw_pulses_per_revolution: 36.0
+    quadrature_multiplier: 4
+    counts_per_revolution: 144.0
+    count_per_meter: 706.5
+    distance_per_count_m: 0.001415428167021
+    known_distance_trial_m: 2.0
+    known_distance_trial_counts: [1405, 1418, 1416]
+    calibration_status: "measured_known_distance_2m_3_trials_2026_07_22"
+
+simulation:
+  timestep_s: 0.01
+  duration_s: 13.4
+  integrator: rk4
+  straight_goal_x_m: 4.0
+  circle_radius_m: 2.0
+  circle_laps: 1.0
+  hardware_output_enabled: false
+  allow_experimental_duty: false
+  actuator:
+    enabled: true
+    speed_time_constant_s: 0.12
+    steer_time_constant_s: 0.08
+    speed_noise_std_mps: 0.0
+    steer_noise_std_rad: 0.0
+    speed_deadband_mps: 0.0
+    steer_deadband_rad: 0.0
+    steer_neutral_offset_rad: 0.0
+    battery_speed_scale: 1.0
+    longitudinal_slip_ratio: 0.0
+    cornering_gain: 1.0
+
+controller:
+  horizon: 12
+  pure_pursuit_lookahead_m: 0.30
+  pure_pursuit_steer_response_s: 0.15
+  max_iterations: 8
+  # 12-step prediction is retained while MPC optimizes three piecewise-constant inputs.
+  mpc_control_blocks: 3
+  # Bound numerical-gradient work so one difficult solve cannot grow without limit.
+  mpc_max_function_evaluations: 16
+  mpc_use_analytic_gradient: true
+  mpc_deadline_s: 0.020
+  mpc_solver: lbfgsb
+  mpc_gradient_step: 0.05
+  num_samples: 256
+  temperature: 0.05
+  speed_target_mps: 0.30
+  speed_noise_mps: 0.01
+  steer_rate_noise_rad_s: 0.05
+  mppi_integrator: rk4
+  use_noise_cost: true
+  noise_cost_weight: 0.01
+  position_weight: 20.0
+  heading_weight: 4.0
+  steer_weight: 40.0
+  speed_weight: 40.0
+  input_rate_weight: 0.05
+  terminal_weight: 30.0
+  seed: 7
+
+lidar:
+  frame_id: laser
+  num_beams: 72
+  fov_rad: 6.283185307179586
+  range_min_m: 0.15
+  range_max_m: 12.0
+  update_rate_hz: 10.0
+  delay_s: 0.0
+  dropout_probability: 0.0
+  noise_std_m: 0.0
+  distance_noise_slope: 0.0
+  burst_start_probability: 0.0
+  burst_length_scans: 1
+  burst_drop_message: false
+  update_rate_jitter_fraction: 0.0
+  delay_jitter_s: 0.0
+  timestamp_jitter_s: 0.0
+  x_offset_m: 0.25
+  y_offset_m: 0.0
+  yaw_offset_rad: 0.0
+  map_x_min_m: -5.0
+  map_x_max_m: 5.0
+  map_y_min_m: -5.0
+  map_y_max_m: 5.0

@@ -1,0 +1,19 @@
+[Unit]
+Description=Real vehicle ROS 2 actuator safety endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@WORKSPACE@
+Environment=ROS_DOMAIN_ID=@ROS_DOMAIN_ID@
+ExecStart=@WORKSPACE@/scripts/run_actuator_service.sh
+ExecStop=@WORKSPACE@/scripts/stop_actuator_service.sh $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=8
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

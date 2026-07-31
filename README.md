@@ -4,6 +4,10 @@
 
 This is the repository of the F1TENTH Gym environment.
 
+The current LiDAR/MPPI research, real-vehicle simulation, ROS 2 integration,
+and hardware-validation status are documented in the
+[current work specification](docs/current_work_specification.md) (Japanese).
+
 This project is still under heavy developement.
 
 You can find the [documentation](https://f1tenth-gym.readthedocs.io/en/latest/) of the environment here.
