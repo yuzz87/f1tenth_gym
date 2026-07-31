@@ -11,15 +11,25 @@ docs/_build/
 flycheck_*
 gym_env/
 
-# Experiment results: keep raw runs local, keep curated reports in git.
-experiments/results/*.csv
-experiments/results/*_sum.svg
-experiments/results/*_view.md
-experiments/results/*.md
-experiments/results/raw/**
-experiments/results/runs/**
+# Generated simulation results: keep raw runs local and curated reports in git.
+experiments/results/**
 !experiments/results/README.md
-!experiments/results/raw/.gitkeep
-!experiments/results/runs/.gitkeep
 !experiments/results/reports/
 !experiments/results/reports/**
+
+# Raw real-vehicle results. Copy selected public artifacts into curated/.
+experiments/real_vehicle/results/**
+!experiments/real_vehicle/results/README.md
+!experiments/real_vehicle/results/curated/
+!experiments/real_vehicle/results/curated/**
+
+# Large slam_toolbox state files. PGM/YAML occupancy maps remain trackable.
+experiments/real_vehicle/maps/**/*.posegraph
+experiments/real_vehicle/maps/**/*.data
+
+# Machine-specific configuration overrides.
+experiments/real_vehicle/config/*.local.yaml
+experiments/real_vehicle/integration_ws/src/real_vehicle_integration/config/*.local.yaml
+
+# Local research notes, reports, and their generated figures.
+experiments/docs/Research/**

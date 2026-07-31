@@ -36,6 +36,12 @@ from numba import njit
 from f110_gym.envs.dynamic_models import vehicle_dynamics_st, pid
 from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
+from f110_gym.envs.lidar_config import (
+    get_lidar_extrinsics,
+    get_scan_angles,
+    resolve_lidar_config,
+    transform_pose_to_lidar,
+)
 
 class Integrator(Enum):
     # 車両運動モデルの数値積分方法。
@@ -66,11 +72,12 @@ class RaceCar(object):
     # LiDAR関連の重い計算資源は全車両で共有する。
     # 複数台の車両を作っても、スキャンシミュレータ本体は1つだけ持つ。
     scan_simulator = None
+    scan_simulator_config = None
     cosines = None
     scan_angles = None
     side_distances = None
 
-    def __init__(self, params, seed, is_ego=False, time_step=0.01, num_beams=1080, fov=4.7, integrator=Integrator.Euler, lidar_dist=0.0):
+    def __init__(self, params, seed, is_ego=False, time_step=0.01, num_beams=1080, fov=4.7, integrator=Integrator.Euler, lidar_dist=0.0, lidar_config=None):
         """
         Init function
 
@@ -81,6 +88,7 @@ class RaceCar(object):
             num_beams (int, default=1080): number of beams in the laser scan
             fov (float, default=4.7): field of view of the laser
             lidar_dist (float, default=0): vertical distance between LiDAR and backshaft
+            lidar_config (dict or str, optional): LiDAR profile or configuration mapping
 
         Returns:
             None
@@ -92,10 +100,21 @@ class RaceCar(object):
         self.seed = seed
         self.is_ego = is_ego
         self.time_step = time_step
-        self.num_beams = num_beams
-        self.fov = fov
+        if lidar_config is None:
+            lidar_config = {"num_beams": num_beams, "fov": fov}
+        self.lidar_config = resolve_lidar_config(lidar_config)
+        self.num_beams = self.lidar_config["num_beams"]
+        self.fov = self.lidar_config["fov"]
+        self.scan_period = (
+            None
+            if self.lidar_config["scan_rate_hz"] is None
+            else 1.0 / float(self.lidar_config["scan_rate_hz"])
+        )
         self.integrator = integrator
         self.lidar_dist = lidar_dist
+        self.lidar_extrinsics = get_lidar_extrinsics(
+            self.lidar_config, legacy_lidar_dist=lidar_dist
+        )
         if self.integrator is Integrator.RK4:
             warnings.warn(f"Chosen integrator is RK4. This is different from previous versions of the gym.")
 
@@ -106,6 +125,16 @@ class RaceCar(object):
         # pose of opponents in the world
         # 他車両の姿勢。LiDARで他車両を検出するために使う。
         self.opp_poses = None
+
+        # LiDAR観測の時刻、更新周期、遅延を管理する。
+        self.lidar_time = 0.0
+        self.next_scan_time = self.scan_period
+        self.current_scan = None
+        self.current_scan_valid = None
+        self.pending_scans = []
+        self.last_scan_time = 0.0
+        self.scan_updated = False
+        self.scan_update_count = 0
 
         # control inputs
         # 物理モデルへ渡す現在の加速度入力とステア角速度入力。
@@ -128,23 +157,43 @@ class RaceCar(object):
         # initialize scan sim
         # LiDARスキャンシミュレータと各ビームの事前計算値を初期化する。
         # ここは全車両で一度だけ実行される。
-        if RaceCar.scan_simulator is None:
-            self.scan_rng = np.random.default_rng(seed=self.seed)
-            RaceCar.scan_simulator = ScanSimulator2D(num_beams, fov)
-
-            scan_ang_incr = RaceCar.scan_simulator.get_increment()
+        self.scan_rng = np.random.default_rng(seed=self.seed)
+        simulator_config = (
+            self.lidar_config["profile"],
+            self.lidar_config["num_beams"],
+            self.lidar_config["fov"],
+            self.lidar_config["angle_min"],
+            self.lidar_config["range_max"],
+            self.lidar_config["range_min"],
+            self.lidar_config["noise_std"],
+            self.lidar_config["noise_std_per_meter"],
+            self.lidar_config["dropout_probability"],
+            self.lidar_config["scan_rate_hz"],
+            self.lidar_config["scan_delay"],
+        )
+        if RaceCar.scan_simulator is None or RaceCar.scan_simulator_config != simulator_config:
+            RaceCar.scan_simulator = ScanSimulator2D(
+                self.num_beams,
+                self.fov,
+                angle_min=self.lidar_config["angle_min"],
+                max_range=self.lidar_config["range_max"],
+                range_min=self.lidar_config["range_min"],
+                noise_std=self.lidar_config["noise_std"],
+                noise_std_per_meter=self.lidar_config["noise_std_per_meter"],
+                dropout_probability=self.lidar_config["dropout_probability"],
+            )
+            RaceCar.scan_simulator_config = simulator_config
 
             # angles of each scan beam, distance from lidar to edge of car at each beam, and precomputed cosines of each angle
-            RaceCar.cosines = np.zeros((num_beams, ))
-            RaceCar.scan_angles = np.zeros((num_beams, ))
-            RaceCar.side_distances = np.zeros((num_beams, ))
+            RaceCar.cosines = np.zeros((self.num_beams, ))
+            RaceCar.scan_angles = get_scan_angles(self.lidar_config)
+            RaceCar.side_distances = np.zeros((self.num_beams, ))
 
             dist_sides = params['width']/2.
             dist_fr = (params['lf']+params['lr'])/2.
 
-            for i in range(num_beams):
-                angle = -fov/2. + i*scan_ang_incr
-                RaceCar.scan_angles[i] = angle
+            for i in range(self.num_beams):
+                angle = RaceCar.scan_angles[i]
                 RaceCar.cosines[i] = np.cos(angle)
 
                 if angle > 0:
@@ -218,6 +267,64 @@ class RaceCar(object):
         self.steer_buffer = np.empty((0, ))
         # reset scan random generator
         self.scan_rng = np.random.default_rng(seed=self.seed)
+        self.lidar_time = 0.0
+        self.next_scan_time = self.scan_period
+        self.pending_scans = []
+        self.last_scan_time = 0.0
+        self.scan_updated = True
+        self.scan_update_count = 1
+        self.current_scan, self.current_scan_valid = self._generate_scan()
+
+    def _generate_scan(self):
+        """現在姿勢からノイズと欠損を含むLiDAR観測を生成する。"""
+
+        scan_pose = np.asarray(
+            transform_pose_to_lidar(
+                self.state[[0, 1, 4]], self.lidar_extrinsics
+            ),
+            dtype=float,
+        )
+        return RaceCar.scan_simulator.scan(
+            scan_pose,
+            self.scan_rng,
+            return_valid_mask=True,
+        )
+
+    def _update_lidar(self):
+        """LiDARの更新周期と観測遅延を適用し、現在の観測を返す。"""
+
+        self.scan_updated = False
+        self.lidar_time += self.time_step
+
+        if self.scan_period is None:
+            # 更新周期未指定時は、従来どおり車体更新ごとに測る。
+            measurement, valid_mask = self._generate_scan()
+            ready_time = self.lidar_time + float(self.lidar_config["scan_delay"])
+            self.pending_scans.append(
+                (ready_time, self.lidar_time, measurement, valid_mask)
+            )
+        elif self.lidar_time >= self.next_scan_time:
+            while self.lidar_time >= self.next_scan_time:
+                measurement, valid_mask = self._generate_scan()
+                ready_time = self.next_scan_time + float(self.lidar_config["scan_delay"])
+                self.pending_scans.append(
+                    (ready_time, self.next_scan_time, measurement, valid_mask)
+                )
+                self.next_scan_time += self.scan_period
+
+        while self.pending_scans and self.pending_scans[0][0] <= self.lidar_time + 1e-12:
+            _, measurement_time, measurement, valid_mask = self.pending_scans.pop(0)
+            self.current_scan = measurement
+            self.current_scan_valid = valid_mask
+            self.last_scan_time = measurement_time
+            self.scan_updated = True
+            self.scan_update_count += 1
+
+        if self.current_scan is None:
+            self.current_scan, self.current_scan_valid = self._generate_scan()
+            self.last_scan_time = self.lidar_time
+
+        return self.current_scan.copy()
 
     def ray_cast_agents(self, scan):
         """
@@ -238,7 +345,15 @@ class RaceCar(object):
             # get vertices of current oppoenent
             opp_vertices = get_vertices(opp_pose, self.params['length'], self.params['width'])
 
-            new_scan = ray_cast(np.append(self.state[0:2], self.state[4]), new_scan, self.scan_angles, opp_vertices)
+            scan_pose = transform_pose_to_lidar(
+                self.state[[0, 1, 4]], self.lidar_extrinsics
+            )
+            new_scan = ray_cast(
+                np.asarray(scan_pose, dtype=float),
+                new_scan,
+                self.scan_angles,
+                opp_vertices,
+            )
 
         return new_scan
 
@@ -428,13 +543,8 @@ class RaceCar(object):
         elif self.state[4] < 0:
             self.state[4] = self.state[4] + 2*np.pi
 
-        # update scan
-        # 更新後の姿勢からLiDAR位置を計算し、新しいスキャンを生成する。
-        scan_x = self.state[0] + self.lidar_dist*np.cos(self.state[4])
-        scan_y = self.state[1] + self.lidar_dist*np.sin(self.state[4])
-        scan_pose = np.array([scan_x, scan_y, self.state[4]])
-        current_scan = RaceCar.scan_simulator.scan(scan_pose, self.scan_rng)
-        # current_scan = RaceCar.scan_simulator.scan(np.append(self.state[0:2],  self.state[4]), self.scan_rng)
+        # 物理更新後の姿勢から、LiDARの更新周期と遅延を適用する。
+        current_scan = self._update_lidar()
 
         return current_scan
 
@@ -472,7 +582,12 @@ class RaceCar(object):
         # ray cast other agents to modify scan
         new_scan = self.ray_cast_agents(current_scan)
 
-        agent_scans[agent_index] = new_scan
+        # 他車両を反映した後もLiDARの測距範囲を維持する。
+        agent_scans[agent_index] = np.clip(
+            new_scan,
+            self.lidar_config["range_min"],
+            self.lidar_config["range_max"],
+        )
 
 class Simulator(object):
     """
@@ -488,7 +603,7 @@ class Simulator(object):
 
     """
 
-    def __init__(self, params, num_agents, seed, time_step=0.01, ego_idx=0, integrator=Integrator.RK4, lidar_dist=0.0):
+    def __init__(self, params, num_agents, seed, time_step=0.01, ego_idx=0, integrator=Integrator.RK4, lidar_dist=0.0, lidar_config=None):
         """
         Init function
 
@@ -499,6 +614,7 @@ class Simulator(object):
             time_step (float, default=0.01): physics time step
             ego_idx (int, default=0): ego vehicle's index in list of agents
             lidar_dist (float, default=0): vertical distance between LiDAR and backshaft
+            lidar_config (dict or str, optional): LiDAR profile or configuration mapping
 
         Returns:
             None
@@ -510,6 +626,7 @@ class Simulator(object):
         self.time_step = time_step
         self.ego_idx = ego_idx
         self.params = params
+        self.lidar_config = resolve_lidar_config(lidar_config)
         self.agent_poses = np.empty((self.num_agents, 3))
         self.agents = []
         self.collisions = np.zeros((self.num_agents, ))
@@ -519,10 +636,10 @@ class Simulator(object):
         # ego車両と、それ以外の車両を生成する。
         for i in range(self.num_agents):
             if i == ego_idx:
-                ego_car = RaceCar(params, self.seed, is_ego=True, time_step=self.time_step, integrator=integrator, lidar_dist=lidar_dist)
+                ego_car = RaceCar(params, self.seed, is_ego=True, time_step=self.time_step, integrator=integrator, lidar_dist=lidar_dist, lidar_config=self.lidar_config)
                 self.agents.append(ego_car)
             else:
-                agent = RaceCar(params, self.seed, is_ego=False, time_step=self.time_step, integrator=integrator, lidar_dist=lidar_dist)
+                agent = RaceCar(params, self.seed, is_ego=False, time_step=self.time_step, integrator=integrator, lidar_dist=lidar_dist, lidar_config=self.lidar_config)
                 self.agents.append(agent)
 
     def set_map(self, map_path, map_ext):
@@ -628,6 +745,11 @@ class Simulator(object):
         # 4. Gym環境へ返すobservation辞書を作る。
         observations = {'ego_idx': self.ego_idx,
             'scans': [],
+            'scan_valid': [],
+            'scan_updated': [],
+            'scan_times': [],
+            'scan_ages': [],
+            'scan_update_counts': [],
             'poses_x': [],
             'poses_y': [],
             'poses_theta': [],
@@ -637,6 +759,13 @@ class Simulator(object):
             'collisions': self.collisions}
         for i, agent in enumerate(self.agents):
             observations['scans'].append(agent_scans[i])
+            observations['scan_valid'].append(agent.current_scan_valid.copy())
+            observations['scan_updated'].append(bool(agent.scan_updated))
+            observations['scan_times'].append(float(agent.last_scan_time))
+            observations['scan_ages'].append(
+                max(0.0, float(agent.lidar_time - agent.last_scan_time))
+            )
+            observations['scan_update_counts'].append(int(agent.scan_update_count))
             observations['poses_x'].append(agent.state[0])
             observations['poses_y'].append(agent.state[1])
             observations['poses_theta'].append(agent.state[4])

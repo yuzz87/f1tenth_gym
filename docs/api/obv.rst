@@ -5,6 +5,10 @@ An observation is returned by the gym environment after resetting and stepping. 
 
 - ``'ego_idx'``: index of the ego agent in the list of agents
 - ``'scans'``: list of length num_agents of numpy.ndarrays of (num_beams, ), each array is the corresponding laser scan of the agent in the list
+- ``'scan_updated'``: list of booleans indicating whether a new LiDAR measurement became available in the current step
+- ``'scan_times'``: list of measurement timestamps for the returned LiDAR scans
+- ``'scan_ages'``: list of seconds since each returned LiDAR scan was measured
+- ``'scan_update_counts'``: list of LiDAR measurement update counts since reset
 - ``'poses_x'``: list of length num_agents of floats, each agent's x pose in the world
 - ``'poses_y'``: list of length num_agents of floats, each agent's y pose in the world
 - ``'poses_theta'``: list of length num_agents of floats, each agent's theta pose in the world

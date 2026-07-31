@@ -3,6 +3,11 @@ from pathlib import Path
 import numpy as np
 
 from f110_gym.envs.laser_models import ScanSimulator2D
+from f110_gym.envs.lidar_config import (
+    get_lidar_extrinsics,
+    resolve_lidar_config,
+    transform_pose_to_lidar,
+)
 
 from .base_localizer import BaseLocalizer
 from .feature_extractor import BeamFeatureExtractor
@@ -11,10 +16,21 @@ from .feature_extractor import BeamFeatureExtractor
 class FeatureMatchingLocalizer(BaseLocalizer):
     """Local search localizer using a compact LiDAR feature signature."""
 
-    def __init__(self, conf, localizer_conf, scan_angles):
+    def __init__(self, conf, localizer_conf, scan_angles, lidar_config=None):
         self.conf = conf
         self.localizer_conf = localizer_conf
         self.full_scan_angles = np.asarray(scan_angles, dtype=float)
+        self.lidar_config = resolve_lidar_config(lidar_config)
+        extrinsic_overrides = {
+            key: localizer_conf[key]
+            for key in ("x_offset", "y_offset", "z_offset", "yaw_offset")
+            if key in localizer_conf
+        }
+        self.lidar_extrinsics = get_lidar_extrinsics(
+            self.lidar_config,
+            legacy_lidar_dist=getattr(conf, "lidar_dist", 0.0),
+            overrides=extrinsic_overrides,
+        )
         self.xy_search_radius = float(localizer_conf.get("xy_search_radius", 0.04))
         self.theta_search_radius = float(localizer_conf.get("theta_search_radius", 0.08))
         self.xy_candidates = int(localizer_conf.get("xy_candidates", 5))
@@ -31,7 +47,13 @@ class FeatureMatchingLocalizer(BaseLocalizer):
         self.feature_extractor = BeamFeatureExtractor(self.full_scan_angles, feature_angles)
         self.scan_beams = int(self.full_scan_angles.shape[0])
         fov = float(self.full_scan_angles[-1] - self.full_scan_angles[0])
-        self.scan_simulator = ScanSimulator2D(self.scan_beams, fov)
+        self.scan_simulator = ScanSimulator2D(
+            self.scan_beams,
+            fov,
+            max_range=float(self.lidar_config["range_max"]),
+            range_min=float(self.lidar_config["range_min"]),
+            angle_min=float(self.full_scan_angles[0]),
+        )
         self.scan_simulator.set_map(str(Path(conf.map_path).with_suffix(".yaml")), conf.map_ext)
         self.dt = float(conf.timestep)
 
@@ -77,7 +99,9 @@ class FeatureMatchingLocalizer(BaseLocalizer):
                     candidate_pose = self.predicted_pose + np.array([dx, dy, dtheta], dtype=float)
                     candidate_pose[2] = self._normalize_angle(candidate_pose[2])
                     simulated_scan = self.scan_simulator.scan(
-                        candidate_pose,
+                        transform_pose_to_lidar(
+                            candidate_pose, self.lidar_extrinsics
+                        ),
                         None,
                         std_dev=self.scan_noise_std,
                     )
@@ -108,6 +132,15 @@ class FeatureMatchingLocalizer(BaseLocalizer):
         self.last_motion_error = float(best_motion_error)
         return self.estimated_pose.copy()
 
+    def predict(self, obs, control=None):
+        """スキャン更新がない周期は運動モデルだけで姿勢を進める。"""
+
+        if self.estimated_pose is None:
+            raise RuntimeError("Localizer must be initialized before predict().")
+        self.predicted_pose = self._predict_pose(obs, control)
+        self.estimated_pose = self.predicted_pose.copy()
+        return self.estimated_pose.copy()
+
     def debug_info(self):
         return {
             "localization_score": self.last_score if self.last_score is not None else 0.0,
@@ -115,6 +148,7 @@ class FeatureMatchingLocalizer(BaseLocalizer):
             "motion_error": self.last_motion_error if self.last_motion_error is not None else 0.0,
             "scan_beams": self.scan_beams,
             "feature_dim": self.feature_dim if self.feature_dim is not None else 0,
+            "lidar_extrinsics": dict(self.lidar_extrinsics),
         }
 
     def _predict_pose(self, obs, control):

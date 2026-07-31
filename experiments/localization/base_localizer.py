@@ -8,5 +8,10 @@ class BaseLocalizer:
         del control
         raise NotImplementedError
 
+    def predict(self, obs, control=None):
+        """Predict the pose without running scan matching."""
+        del obs, control
+        raise NotImplementedError
+
     def debug_info(self):
         return {}

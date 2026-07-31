@@ -1,0 +1,19 @@
+[Unit]
+Description=Real Vehicle RPLIDAR UDP Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@INSTALL_DIR@
+Environment=PC_LIDAR_HOST=@PC_LIDAR_HOST@
+Environment=PC_LIDAR_PORT=5010
+ExecStart=@INSTALL_DIR@/run_lidar_agent.sh
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
