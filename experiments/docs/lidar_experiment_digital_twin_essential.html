@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="RPLIDAR A1のシミュレーション・実機実験・デジタルツイン向け重要データ">
+  <title>RPLIDAR A1 実験・デジタルツイン用データ要約</title>
+  <style>
+    :root {
+      --bg: #071018;
+      --panel: #0e1b28;
+      --panel-2: #122435;
+      --text: #edf5fb;
+      --muted: #9fb2c2;
+      --faint: #71889b;
+      --line: rgba(151, 192, 219, .18);
+      --cyan: #5ed0ff;
+      --green: #70e1b5;
+      --yellow: #ffd27a;
+      --red: #ff8e8e;
+      --blue-soft: rgba(94, 208, 255, .10);
+      --green-soft: rgba(112, 225, 181, .10);
+      --yellow-soft: rgba(255, 210, 122, .10);
+      --red-soft: rgba(255, 142, 142, .10);
+      --shadow: 0 22px 58px rgba(0, 0, 0, .28);
+      --radius: 18px;
+    }
+
+    html[data-theme="light"] {
+      --bg: #f2f7fa;
+      --panel: #ffffff;
+      --panel-2: #f7fbfd;
+      --text: #172531;
+      --muted: #516675;
+      --faint: #758999;
+      --line: rgba(29, 82, 116, .15);
+      --cyan: #007fae;
+      --green: #00785f;
+      --yellow: #8a5b00;
+      --red: #b33838;
+      --blue-soft: rgba(0, 127, 174, .08);
+      --green-soft: rgba(0, 120, 95, .08);
+      --yellow-soft: rgba(138, 91, 0, .08);
+      --red-soft: rgba(179, 56, 56, .07);
+      --shadow: 0 18px 48px rgba(41, 78, 101, .12);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(94,208,255,.12), transparent 32rem),
+        radial-gradient(circle at 90% 18%, rgba(112,225,181,.08), transparent 30rem),
+        var(--bg);
+      font-family: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP",
+        system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.75;
+      letter-spacing: .012em;
+    }
+
+    a { color: var(--cyan); }
+    button { font: inherit; }
+    :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg) 84%, transparent);
+      backdrop-filter: blur(16px);
+    }
+
+    .topbar__inner {
+      width: min(1240px, calc(100% - 28px));
+      min-height: 62px;
+      margin: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .brand__mark {
+      width: 35px;
+      height: 35px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid rgba(94,208,255,.36);
+      border-radius: 10px;
+      color: var(--cyan);
+      background: var(--blue-soft);
+      font-size: .68rem;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+
+    .brand__text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+
+    .button {
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      background: var(--panel);
+      cursor: pointer;
+    }
+
+    .button:hover {
+      border-color: color-mix(in srgb, var(--cyan) 48%, var(--line));
+      background: var(--blue-soft);
+    }
+
+    .hero {
+      width: min(1240px, calc(100% - 28px));
+      margin: 28px auto 20px;
+      padding: clamp(28px, 5vw, 58px);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background:
+        linear-gradient(135deg, rgba(94,208,255,.12), transparent 52%),
+        linear-gradient(315deg, rgba(112,225,181,.08), transparent 46%),
+        var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      width: fit-content;
+      margin-bottom: 14px;
+      padding: 6px 10px;
+      border: 1px solid rgba(94,208,255,.36);
+      border-radius: 999px;
+      color: var(--cyan);
+      background: var(--blue-soft);
+      font-size: .74rem;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4.25rem);
+      line-height: 1.13;
+      letter-spacing: -.035em;
+    }
+
+    .lead {
+      max-width: 920px;
+      margin: 20px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.4vw, 1.15rem);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .hero-stat {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--panel-2) 86%, transparent);
+    }
+
+    .hero-stat strong {
+      display: block;
+      color: var(--cyan);
+      font-size: 1.35rem;
+      line-height: 1.2;
+    }
+
+    .hero-stat span {
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    .jump {
+      width: min(1240px, calc(100% - 28px));
+      margin: 0 auto 20px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .jump a {
+      display: block;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--text);
+      background: var(--panel);
+      text-decoration: none;
+      box-shadow: var(--shadow);
+    }
+
+    .jump a:hover {
+      border-color: color-mix(in srgb, var(--cyan) 48%, var(--line));
+      transform: translateY(-1px);
+    }
+
+    .jump strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .jump span {
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    main {
+      width: min(1240px, calc(100% - 28px));
+      margin: 0 auto 56px;
+    }
+
+    section {
+      margin-top: 22px;
+      padding: clamp(22px, 4vw, 38px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.45rem, 2.8vw, 2.15rem);
+      line-height: 1.3;
+      letter-spacing: -.02em;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+
+    .section-intro {
+      max-width: 850px;
+      margin: 0 0 22px;
+      color: var(--muted);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-2);
+    }
+
+    .card p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: .68rem;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+
+    .tag-blue { color: var(--cyan); background: var(--blue-soft); }
+    .tag-green { color: var(--green); background: var(--green-soft); }
+    .tag-yellow { color: var(--yellow); background: var(--yellow-soft); }
+    .tag-red { color: var(--red); background: var(--red-soft); }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      font-size: .88rem;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th:last-child, td:last-child { border-right: 0; }
+    tr:last-child td { border-bottom: 0; }
+
+    th {
+      color: var(--text);
+      background: color-mix(in srgb, var(--panel-2) 92%, var(--cyan) 8%);
+      white-space: nowrap;
+    }
+
+    tbody tr:nth-child(even) {
+      background: color-mix(in srgb, var(--blue-soft) 34%, transparent);
+    }
+
+    code {
+      padding: .12em .36em;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      color: color-mix(in srgb, var(--cyan) 76%, var(--text));
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: .88em;
+    }
+
+    pre {
+      position: relative;
+      margin: 16px 0 0;
+      overflow: auto;
+      padding: 50px 16px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg) 90%, transparent);
+      line-height: 1.55;
+    }
+
+    pre code {
+      display: block;
+      min-width: max-content;
+      padding: 0;
+      border: 0;
+      color: var(--text);
+      background: transparent;
+      font-size: .80rem;
+      white-space: pre;
+    }
+
+    .copy {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--panel);
+      cursor: pointer;
+      font-size: .72rem;
+    }
+
+    .notice {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-left: 4px solid var(--yellow);
+      border-radius: 0 10px 10px 0;
+      color: var(--muted);
+      background: var(--yellow-soft);
+    }
+
+    .notice strong { color: var(--yellow); }
+
+    .danger {
+      border-left-color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .danger strong { color: var(--red); }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 9px;
+      align-items: stretch;
+      margin-top: 16px;
+    }
+
+    .pipeline__item {
+      position: relative;
+      padding: 14px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-2);
+      text-align: center;
+      font-size: .82rem;
+    }
+
+    .pipeline__item:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -10px;
+      z-index: 2;
+      color: var(--cyan);
+      transform: translateY(-50%);
+      font-weight: 900;
+    }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 18px;
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 28px;
+      color: var(--muted);
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .checklist--warning li::before {
+      content: "!";
+      color: var(--yellow);
+    }
+
+    .small {
+      color: var(--faint);
+      font-size: .78rem;
+    }
+
+    footer {
+      width: min(1240px, calc(100% - 28px));
+      margin: -30px auto 32px;
+      color: var(--faint);
+      font-size: .76rem;
+      text-align: center;
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid, .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .pipeline { grid-template-columns: 1fr; }
+      .pipeline__item:not(:last-child)::after {
+        content: "↓";
+        top: auto;
+        right: 50%;
+        bottom: -17px;
+        transform: translateX(50%);
+      }
+    }
+
+    @media (max-width: 620px) {
+      .brand__text { max-width: 56vw; font-size: .82rem; }
+      .toolbar .print { display: none; }
+      .hero, section { border-radius: 18px; }
+      .hero-grid, .jump, .cards, .checklist { grid-template-columns: 1fr; }
+      h1 { font-size: 2.2rem; }
+      section { padding: 20px 15px; }
+      .table-wrap, pre { margin-right: -3px; margin-left: -3px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition: none !important; }
+    }
+
+    @media print {
+      :root, html[data-theme="dark"], html[data-theme="light"] {
+        --bg: #fff; --panel: #fff; --panel-2: #fff; --text: #111;
+        --muted: #444; --faint: #666; --line: #ccc; --shadow: none;
+      }
+      body { background: #fff; font-size: 10pt; }
+      .topbar, .jump, .copy, footer { display: none !important; }
+      .hero, main { width: 100%; margin: 0; }
+      .hero, section { border: 0; box-shadow: none; }
+      section { break-inside: avoid; padding: 8mm 0; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; font-size: 7.5pt; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand">
+        <div class="brand__mark">A1</div>
+        <div class="brand__text">RPLIDAR 実験・デジタルツイン用要約</div>
+      </div>
+      <div class="toolbar">
+        <button class="button print" id="printButton" type="button">印刷</button>
+        <button class="button" id="themeButton" type="button">明るく</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="eyebrow">Essential Parameters Only</div>
+    <h1>RPLIDAR A1<br>実験・デジタルツイン用データ</h1>
+    <p class="lead">
+      シミュレーション、実機検証、センサ再現型デジタルツインに必要な値だけを抽出した資料。
+      実測値、設定値、未検証事項を分離し、制御系へそのまま転記しやすい形で整理している。
+    </p>
+    <div class="hero-grid">
+      <div class="hero-stat"><strong>360</strong><span>正規化ビーム数</span></div>
+      <div class="hero-stat"><strong>7.6 Hz</strong><span>代表更新周波数</span></div>
+      <div class="hero-stat"><strong>0.15–12 m</strong><span>使用レンジ設定</span></div>
+      <div class="hero-stat"><strong>約300°</strong><span>後方マスク後の有効視野</span></div>
+    </div>
+  </div>
+
+  <nav class="jump" aria-label="用途別セクション">
+    <a href="#simulation"><strong>シミュレーション</strong><span>LaserScanモデル、周期、欠損、取付位置</span></a>
+    <a href="#hardware"><strong>実機実験</strong><span>通信仕様、検証済み性能、再現条件</span></a>
+    <a href="#digital-twin"><strong>デジタルツイン</strong><span>実測分布、ログ再生、再現レベル</span></a>
+  </nav>
+
+  <main>
+    <section id="common">
+      <h2>共通センサモデル</h2>
+      <p class="section-intro">
+        シミュレーションと実機のインターフェースを一致させるための基準値。
+        物理LiDARの生点数は固定ではないため、制御系では360点へ正規化する。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>項目</th><th>採用値</th><th>用途</th><th>区分</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>製品</td><td>Slamtec RPLIDAR A1M8-R6</td><td>実機再現・記録識別</td><td>実機確認</td></tr>
+            <tr><td>Scan Mode</td><td>Sensitivity</td><td>取得条件の再現</td><td>実機設定</td></tr>
+            <tr><td>生点数</td><td>通常約1000点/周</td><td>生センサモデル</td><td>実測</td></tr>
+            <tr><td>正規化後</td><td>360 beams</td><td>ROS 2・制御・シミュレーション共通</td><td>実装仕様</td></tr>
+            <tr><td>角度範囲</td><td><code>-π</code> ～ <code>π - 1°</code></td><td><code>LaserScan</code> geometry</td><td>実装仕様</td></tr>
+            <tr><td>角度分解能</td><td>1°</td><td>360ビン化</td><td>実装仕様</td></tr>
+            <tr><td>距離範囲</td><td>0.15～12.0 m</td><td>有効判定・クリッピング</td><td>処理設定</td></tr>
+            <tr><td>代表周期</td><td>約0.132 s</td><td>センサ更新周期</td><td>保存実測の平均</td></tr>
+            <tr><td>代表周波数</td><td>約7.6 Hz</td><td>シミュレーション周期・timeout設計</td><td>保存実測の平均</td></tr>
+            <tr><td>無効値</td><td><code>inf</code>（CSVでは<code>null</code>）</td><td>欠測表現</td><td>実装仕様</td></tr>
+            <tr><td>角度方向</td><td>SDK角度を反転</td><td>ROS座標系との一致</td><td>実機確認</td></tr>
+            <tr><td>車両前方</td><td>0°</td><td>座標基準</td><td>実装仕様</td></tr>
+            <tr><td>後方マスク</td><td>中心±30°</td><td>車体機構の自己反射除去</td><td>実機確認</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="notice">
+        <strong>重要：</strong>12.0 mは現在の処理上限であり、独立した真値試験による精度保証距離ではない。
+      </div>
+    </section>
+
+    <section id="simulation">
+      <h2>シミュレーションで使う値</h2>
+      <p class="section-intro">
+        仮想LiDARを実機へ近づける場合は、理想的な360°センサとして扱わず、
+        実機の周期、後方遮蔽、欠測、取付オフセットを反映する。
+      </p>
+
+      <div class="cards">
+        <article class="card">
+          <span class="tag tag-blue">必須</span>
+          <h3>LaserScan geometry</h3>
+          <p>360 beams、1°刻み、<code>-π</code>から<code>π-1°</code>。無効距離は<code>inf</code>。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-blue">必須</span>
+          <h3>センサ取付位置</h3>
+          <p><code>base_link</code>基準で x=+0.25 m、y=0、z=+0.11 m、yaw=0。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-blue">必須</span>
+          <h3>更新周期</h3>
+          <p>基準値は0.132 s、約7.6 Hz。制御周期と同じ値に固定しない。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-green">現実性向上</span>
+          <h3>後方遮蔽</h3>
+          <p>後方中心±30°を常に無効化し、利用可能な視野を約300°とする。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-green">現実性向上</span>
+          <h3>欠測率</h3>
+          <p>保存実測では平均263.08/360、約73.1%が有限値。ただし環境依存。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-yellow">故障注入</span>
+          <h3>周期外れ</h3>
+          <p>稀に約0.258 sの二周期相当scanが記録された。ジッタ試験に使用可能。</p>
+        </article>
+      </div>
+
+      <div class="pipeline" aria-label="推奨シミュレーション処理">
+        <div class="pipeline__item">仮想環境との<br>レイ交差</div>
+        <div class="pipeline__item">0.15–12 m<br>範囲判定</div>
+        <div class="pipeline__item">後方±30°<br>マスク</div>
+        <div class="pipeline__item">欠測・周期揺らぎ<br>付与</div>
+        <div class="pipeline__item">ROS 2<br><code>/scan</code></div>
+      </div>
+    </section>
+
+    <section id="hardware">
+      <h2>実機実験で使う値</h2>
+      <p class="section-intro">
+        実機側の再現性、安全確認、PC接続に必要な情報。短時間通信は安定していたが、
+        長時間、振動中、旋回中の性能は未確認である。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>項目</th><th>値</th><th>実験での意味</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>シリアル</td><td>115200 baud</td><td>Pi上の公式SDK Agent接続</td></tr>
+            <tr><td>USBデバイス</td><td><code>/dev/ttyUSB0</code></td><td>接続候補。安定パス使用を推奨</td></tr>
+            <tr><td>ROS 2 topic</td><td><code>/scan</code></td><td><code>sensor_msgs/msg/LaserScan</code></td></tr>
+            <tr><td>frame</td><td><code>laser</code></td><td>TFと整合させる</td></tr>
+            <tr><td>UDP port</td><td>5010</td><td>LiDAR専用。アクチュエータ系と分離</td></tr>
+            <tr><td>packet構成</td><td>120 beams × 3 packets</td><td>1 scan = 360 beams</td></tr>
+            <tr><td>packet size</td><td>544 byte</td><td>IP fragmentationを避ける設計</td></tr>
+            <tr><td>payload</td><td>network byte order float32</td><td>距離配列</td></tr>
+            <tr><td>検査</td><td>CRC32、scan ID、重複、timeout</td><td>異常scanの除外</td></tr>
+            <tr><td>短時間試験</td><td>invalid / incomplete / gap = 0</td><td>複数の短時間sessionで確認</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:22px">代表実測データ</h3>
+      <div class="cards">
+        <article class="card">
+          <span class="tag tag-green">保存データ全体</span>
+          <h3>5試行・818 unique scans</h3>
+          <p>平均有効beam 263.08、有限距離215,201点、平均周期0.131523 s。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-green">代表試験</span>
+          <h3>guarded 50 cm</h3>
+          <p>約25 s、平均263 beam、7.71 Hz、通信異常0、前進推定0.484076 m。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-yellow">解釈注意</span>
+          <h3>LiDAR補正0回</h3>
+          <p>50 cm最終試験では全判断がprediction_best。LiDAR補正性能の証明ではない。</p>
+        </article>
+      </div>
+
+      <div class="notice danger">
+        <strong>未確認：</strong>旋回時yaw、モーター振動中の有効率、数時間通信、LiDAR単体の絶対測距精度、閉ループ自律走行。
+      </div>
+    </section>
+
+    <section id="digital-twin">
+      <h2>デジタルツインで使うデータ</h2>
+      <p class="section-intro">
+        デジタルツインでは、理想センサを置くだけでなく、実機の座標、周期、遮蔽、欠測、
+        実ログを段階的に取り込む。用途に応じて次の3段階で実装できる。
+      </p>
+
+      <div class="cards">
+        <article class="card">
+          <span class="tag tag-blue">Level 1</span>
+          <h3>幾何・通信互換</h3>
+          <p>360 beams、TF、range、後方マスク、ROS 2 topicを一致させる。制御ソフトの互換確認向け。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-green">Level 2</span>
+          <h3>実測分布を反映</h3>
+          <p>約7.6 Hz、平均有効率73.1%、周期ジッタ、稀な二周期scanを加える。</p>
+        </article>
+        <article class="card">
+          <span class="tag tag-yellow">Level 3</span>
+          <h3>実ログ再生</h3>
+          <p><code>scan.csv</code>、<code>odom.csv</code>、rosbag、保存地図を再生し、同一入力で制御・localizerを比較する。</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>再利用可能データ</th><th>量</th><th>主用途</th><th>注意</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>完全scan CSV</td><td>5試行、827行</td><td>センサ再生、欠測分布、周期評価</td><td>unique scanは818</td></tr>
+            <tr><td>LiDAR診断CSV</td><td>10試行、2,180行</td><td>通信状態、scan age、packet counter</td><td>短時間session</td></tr>
+            <tr><td>Phase 5 rosbag</td><td>5本、約14.89 MiB</td><td>localization再生</td><td>一部topicはQoSで0件</td></tr>
+            <tr><td>Phase 6 rosbag</td><td>6本、約27.22 MiB</td><td>MPPIドライラン再生</td><td>地図一致品質は不合格例あり</td></tr>
+            <tr><td>2D占有格子地図</td><td>5組</td><td>localizer、デジタル環境照合</td><td><code>small_test_area_03</code>を正式採用</td></tr>
+            <tr><td>オフライン再生</td><td>5試行中4合格、1 N/A</td><td>実機なしで回帰試験</td><td>N/Aは終端データ不足</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:22px">デジタルツインの妥当性確認に使う基準</h3>
+      <ul class="checklist">
+        <li>scan数と周期が実測の7～8 Hz帯に入る</li>
+        <li>後方±30°が常に無効化される</li>
+        <li>TFが x=0.25 m、z=0.11 mで一致する</li>
+        <li>同じCSVを再生したとき同じlocalization結果になる</li>
+        <li>timeout・二周期scanで制御が安全側へ移行する</li>
+        <li>実機とシミュレーションで同じ<code>/scan</code>契約を使う</li>
+      </ul>
+    </section>
+
+    <section id="limits">
+      <h2>モデル化に使ってはいけない値</h2>
+      <p class="section-intro">
+        次の項目は独立した真値測定がないため、センサ精度や保証性能として設定しない。
+      </p>
+      <ul class="checklist checklist--warning">
+        <li>静止時beam標準偏差をRPLIDAR単体の測距精度とみなすこと</li>
+        <li>50 cm試験をLiDAR補正精度の証明として扱うこと</li>
+        <li>短時間packet error 0を長時間loss率0とみなすこと</li>
+        <li>12 mを保証された有効測距距離として扱うこと</li>
+        <li>材質・日光・鏡面・透明面の性能を推測すること</li>
+        <li>旋回、振動、実車自律走行の性能を既確認として扱うこと</li>
+      </ul>
+    </section>
+
+    <section id="config">
+      <h2>機械可読設定</h2>
+      <p class="section-intro">
+        シミュレータ、ROS 2ノード、デジタルツイン設定へ転記できるJSON。
+        数値は上記の採用値と保存実測値を分離している。
+      </p>
+      <pre><button class="copy" type="button" data-copy-target="configCode">コピー</button><code id="configCode">{
+  "sensor": {
+    "product": "Slamtec RPLIDAR A1M8-R6",
+    "scan_mode": "Sensitivity",
+    "baud_rate": 115200,
+    "raw_points_per_revolution_typical": 1000,
+    "normalized_beams": 360,
+    "range_min_m": 0.15,
+    "range_max_m": 12.0,
+    "scan_period_s_nominal": 0.132,
+    "scan_rate_hz_nominal": 7.6,
+    "angle_min_rad": -3.141592653589793,
+    "angle_max_rad": 3.12413936106985,
+    "angle_increment_rad": 0.017453292519943295,
+    "angle_inverted": true,
+    "front_angle_deg": 0,
+    "rear_mask_half_width_deg": 30,
+    "invalid_value": "inf"
+  },
+  "transform_base_link_to_laser": {
+    "x_m": 0.25,
+    "y_m": 0.0,
+    "z_m": 0.11,
+    "yaw_rad": 0.0
+  },
+  "ros2": {
+    "topic": "/scan",
+    "message_type": "sensor_msgs/msg/LaserScan",
+    "frame_id": "laser"
+  },
+  "udp_transport": {
+    "port": 5010,
+    "protocol_version": 1,
+    "header_bytes": 64,
+    "beams_per_packet": 120,
+    "packets_per_scan": 3,
+    "packet_bytes": 544,
+    "payload": "network-byte-order float32",
+    "integrity_check": "CRC32"
+  },
+  "measured_reference": {
+    "unique_scans": 818,
+    "average_valid_beams": 263.08,
+    "average_valid_ratio": 0.731,
+    "finite_range_min_m": 0.238,
+    "finite_range_max_m": 11.808,
+    "finite_range_median_m": 1.758
+  }
+}</code></pre>
+      <p class="small">
+        <code>measured_reference</code>は環境依存の参考分布であり、製品仕様ではない。
+      </p>
+    </section>
+  </main>
+
+  <footer>Source distilled from the real RPLIDAR A1 hardware data report. No new experiment results were added.</footer>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const themeButton = document.getElementById("themeButton");
+      const saved = localStorage.getItem("lidar-essential-theme");
+      const preferred = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      const apply = (theme) => {
+        root.dataset.theme = theme;
+        themeButton.textContent = theme === "dark" ? "明るく" : "暗く";
+      };
+      apply(saved || preferred);
+
+      themeButton.addEventListener("click", () => {
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        localStorage.setItem("lidar-essential-theme", next);
+        apply(next);
+      });
+
+      document.getElementById("printButton").addEventListener("click", () => window.print());
+
+      document.querySelectorAll("[data-copy-target]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target = document.getElementById(button.dataset.copyTarget);
+          try {
+            await navigator.clipboard.writeText(target.textContent || "");
+            button.textContent = "コピー済み";
+          } catch {
+            button.textContent = "失敗";
+          }
+          setTimeout(() => button.textContent = "コピー", 1200);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
